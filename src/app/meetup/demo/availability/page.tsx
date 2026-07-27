@@ -31,19 +31,32 @@ const ALL_TIME_SLOTS = [
   },
 ];
 
-type AvailabilityByDate = Record<string, string[]>;
+type AvailabilityByDate = Record<
+  string,
+  string[]
+>;
 
-type MeetupDraft = {
-  meetupName?: string;
-  candidateDates?: string[];
-  timeSlots?: string[];
+type JoinedMeetup = {
+  id: string;
+  invite_code: string;
+  meetup_name: string;
+  location: string | null;
+  month: string | null;
+  candidate_dates: string[];
+  time_slots: string[];
+  response_deadline: string | null;
+  created_at: string;
 };
 
 type ParticipantData = {
   name?: string;
+  meetupId?: string;
+  inviteCode?: string;
 };
 
 type SavedAvailability = {
+  meetupId?: string;
+  inviteCode?: string;
   participantName?: string;
   availability?: AvailabilityByDate;
   updatedAt?: string;
@@ -52,127 +65,216 @@ type SavedAvailability = {
 export default function AvailabilityPage() {
   const router = useRouter();
 
-  const [meetupDraft, setMeetupDraft] =
-    useState<MeetupDraft>({});
+  const [meetup, setMeetup] =
+    useState<JoinedMeetup | null>(null);
 
-  const [participantName, setParticipantName] =
-    useState("Guest");
+  const [
+    participantName,
+    setParticipantName,
+  ] = useState("Guest");
 
-  const [availability, setAvailability] =
-    useState<AvailabilityByDate>({});
+  const [
+    availability,
+    setAvailability,
+  ] = useState<AvailabilityByDate>({});
 
-    const [openDate, setOpenDate] =
-  useState<string | null>(null);
+  const [openDate, setOpenDate] =
+    useState<string | null>(null);
+
+  const [isLoading, setIsLoading] =
+    useState(true);
 
   useEffect(() => {
-    const savedDraft = sessionStorage.getItem(
-      "boardmeet-create-draft",
-    );
+    const savedMeetup =
+      sessionStorage.getItem(
+        "boardmeet-joined-meetup",
+      );
 
-    if (savedDraft) {
-      try {
-        const parsedDraft = JSON.parse(
-          savedDraft,
-        ) as MeetupDraft;
-
-        setMeetupDraft(parsedDraft);
-      } catch {
-        console.error(
-          "Could not read meetup data.",
-        );
-      }
+    if (!savedMeetup) {
+      setIsLoading(false);
+      router.replace("/join");
+      return;
     }
 
-    const savedParticipant = sessionStorage.getItem(
-      "boardmeet-participant",
-    );
+    let parsedMeetup: JoinedMeetup;
 
-    if (savedParticipant) {
-      try {
-        const participant = JSON.parse(
-          savedParticipant,
-        ) as ParticipantData;
+    try {
+      parsedMeetup = JSON.parse(
+        savedMeetup,
+      ) as JoinedMeetup;
 
-        if (participant.name?.trim()) {
-          setParticipantName(
-            participant.name.trim(),
-          );
-        }
-      } catch {
-        console.error(
-          "Could not read participant data.",
+      if (
+        !parsedMeetup.id ||
+        !parsedMeetup.invite_code ||
+        !parsedMeetup.meetup_name
+      ) {
+        throw new Error(
+          "Invalid meetup data.",
         );
       }
+
+      setMeetup(parsedMeetup);
+    } catch (error) {
+      console.error(
+        "Could not read joined meetup data.",
+        error,
+      );
+
+      sessionStorage.removeItem(
+        "boardmeet-joined-meetup",
+      );
+
+      sessionStorage.removeItem(
+        "boardmeet-joined-code",
+      );
+
+      setIsLoading(false);
+      router.replace("/join");
+      return;
     }
 
-    const savedAvailability = sessionStorage.getItem(
-      "boardmeet-availability",
-    );
+    const savedParticipant =
+      sessionStorage.getItem(
+        "boardmeet-participant",
+      );
+
+    if (!savedParticipant) {
+      setIsLoading(false);
+      router.replace("/meetup/demo");
+      return;
+    }
+
+    try {
+      const participant = JSON.parse(
+        savedParticipant,
+      ) as ParticipantData;
+
+      if (!participant.name?.trim()) {
+        setIsLoading(false);
+        router.replace("/meetup/demo");
+        return;
+      }
+
+      setParticipantName(
+        participant.name.trim(),
+      );
+    } catch (error) {
+      console.error(
+        "Could not read participant data.",
+        error,
+      );
+
+      setIsLoading(false);
+      router.replace("/meetup/demo");
+      return;
+    }
+
+    const savedAvailability =
+      sessionStorage.getItem(
+        "boardmeet-availability",
+      );
 
     if (savedAvailability) {
       try {
-        const parsedAvailability = JSON.parse(
-          savedAvailability,
-        ) as SavedAvailability;
+        const parsedAvailability =
+          JSON.parse(
+            savedAvailability,
+          ) as SavedAvailability;
 
-        if (parsedAvailability.availability) {
+        const belongsToCurrentMeetup =
+          !parsedAvailability.meetupId ||
+          parsedAvailability.meetupId ===
+            parsedMeetup.id;
+
+        if (
+          belongsToCurrentMeetup &&
+          parsedAvailability.availability
+        ) {
           setAvailability(
             parsedAvailability.availability,
           );
         }
-      } catch {
+      } catch (error) {
         console.error(
           "Could not read availability data.",
+          error,
         );
       }
     }
-  }, []);
 
-  const candidateDates = useMemo(() => {
-    if (meetupDraft.candidateDates?.length) {
-      return meetupDraft.candidateDates;
+    const firstCandidateDate =
+      parsedMeetup.candidate_dates?.[0];
+
+    if (firstCandidateDate) {
+      setOpenDate(firstCandidateDate);
     }
 
-    return [];
-  }, [meetupDraft.candidateDates]);
+    setIsLoading(false);
+  }, [router]);
 
-  const availableTimeSlots = useMemo(() => {
-    if (!meetupDraft.timeSlots?.length) {
+  const candidateDates = useMemo(() => {
+    if (
+      !Array.isArray(
+        meetup?.candidate_dates,
+      )
+    ) {
       return [];
     }
 
-    return ALL_TIME_SLOTS.filter((slot) =>
-      meetupDraft.timeSlots?.includes(slot.id),
+    return meetup.candidate_dates.filter(
+      (date): date is string =>
+        typeof date === "string" &&
+        date.trim().length > 0,
     );
-  }, [meetupDraft.timeSlots]);
+  }, [meetup?.candidate_dates]);
+
+  const availableTimeSlots = useMemo(() => {
+    if (
+      !Array.isArray(meetup?.time_slots)
+    ) {
+      return [];
+    }
+
+    return ALL_TIME_SLOTS.filter(
+      (slot) =>
+        meetup.time_slots.includes(slot.id),
+    );
+  }, [meetup?.time_slots]);
 
   function toggleTimeSlot(
     dateKey: string,
     slotId: string,
   ) {
     setAvailability((current) => {
-      const currentSlots = current[dateKey] ?? [];
+      const currentSlots =
+        current[dateKey] ?? [];
 
       const alreadySelected =
         currentSlots.includes(slotId);
 
+      const nextSlots = alreadySelected
+        ? currentSlots.filter(
+            (slot) => slot !== slotId,
+          )
+        : [...currentSlots, slotId];
+
       return {
         ...current,
-        [dateKey]: alreadySelected
-          ? currentSlots.filter(
-              (slot) => slot !== slotId,
-            )
-          : [...currentSlots, slotId],
+        [dateKey]: nextSlots,
       };
     });
   }
 
-  function selectAllForDate(dateKey: string) {
+  function selectAllForDate(
+    dateKey: string,
+  ) {
     const selectedSlots =
       availability[dateKey] ?? [];
 
     const availableSlotIds =
-      availableTimeSlots.map((slot) => slot.id);
+      availableTimeSlots.map(
+        (slot) => slot.id,
+      );
 
     const allSelected =
       availableSlotIds.length > 0 &&
@@ -189,28 +291,76 @@ export default function AvailabilityPage() {
   }
 
   function handleContinue() {
-    const hasAtLeastOneSelection = Object.values(
-      availability,
-    ).some((slots) => slots.length > 0);
+    if (!meetup) {
+      alert(
+        "The meetup information could not be found.",
+      );
+      return;
+    }
+
+    const cleanedAvailability =
+      Object.fromEntries(
+        candidateDates.map((dateKey) => [
+          dateKey,
+          (
+            availability[dateKey] ?? []
+          ).filter((slotId) =>
+            availableTimeSlots.some(
+              (slot) =>
+                slot.id === slotId,
+            ),
+          ),
+        ]),
+      ) as AvailabilityByDate;
+
+    const hasAtLeastOneSelection =
+      Object.values(
+        cleanedAvailability,
+      ).some((slots) => slots.length > 0);
 
     if (!hasAtLeastOneSelection) {
       alert(
         "Please select at least one available time slot.",
       );
-
       return;
     }
 
     sessionStorage.setItem(
       "boardmeet-availability",
       JSON.stringify({
+        meetupId: meetup.id,
+        inviteCode: meetup.invite_code,
         participantName,
-        availability,
-        updatedAt: new Date().toISOString(),
+        availability:
+          cleanedAvailability,
+        updatedAt:
+          new Date().toISOString(),
       }),
     );
 
     router.push("/meetup/demo/games");
+  }
+
+  if (isLoading) {
+    return (
+      <MobileShell>
+        <div className="flex min-h-screen items-center justify-center bg-[#FAF9FF]">
+          <div className="flex flex-col items-center">
+            <span className="material-symbols-rounded animate-spin text-[36px] text-violet-600">
+              progress_activity
+            </span>
+
+            <p className="mt-3 text-sm font-semibold text-gray-500">
+              Loading availability...
+            </p>
+          </div>
+        </div>
+      </MobileShell>
+    );
+  }
+
+  if (!meetup) {
+    return null;
   }
 
   return (
@@ -222,7 +372,7 @@ export default function AvailabilityPage() {
             onClick={() =>
               router.push("/meetup/demo")
             }
-            className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-gray-700 shadow-sm"
+            className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-gray-700 shadow-sm transition active:scale-95"
             aria-label="Go back"
           >
             <span className="material-symbols-rounded">
@@ -249,8 +399,7 @@ export default function AvailabilityPage() {
             </p>
 
             <h1 className="mt-3 text-[27px] font-bold leading-tight tracking-tight">
-              {meetupDraft.meetupName ||
-                "Board Game Meetup"}
+              {meetup.meetup_name}
             </h1>
 
             <div className="mt-5 flex items-center gap-3">
@@ -269,6 +418,16 @@ export default function AvailabilityPage() {
                   {participantName}
                 </p>
               </div>
+            </div>
+
+            <div className="mt-4 flex items-center gap-2 text-xs text-violet-100">
+              <span className="material-symbols-rounded text-[17px]">
+                password
+              </span>
+
+              <span className="font-mono font-bold">
+                {meetup.invite_code}
+              </span>
             </div>
           </section>
 
@@ -302,9 +461,10 @@ export default function AvailabilityPage() {
                   </p>
 
                   <p className="mt-1 text-sm leading-6 text-red-700">
-                    Create a new meetup and select
-                    candidate dates and time slots
-                    before continuing.
+                    This meetup does not have valid
+                    candidate dates or time slots.
+                    Ask the host to create a new
+                    meetup.
                   </p>
                 </div>
               </div>
@@ -312,142 +472,172 @@ export default function AvailabilityPage() {
               <button
                 type="button"
                 onClick={() =>
-                  router.push("/create")
+                  router.push("/join")
                 }
                 className="mt-4 w-full rounded-2xl bg-red-600 px-4 py-3 text-sm font-bold text-white"
               >
-                Create New Meetup
+                Return to Join
               </button>
             </section>
           ) : (
             <section className="mt-7 space-y-4">
-              {candidateDates.map((dateKey) => {
-                const selectedSlots =
-                  availability[dateKey] ?? [];
+              {candidateDates.map(
+                (dateKey) => {
+                  const selectedSlots =
+                    availability[dateKey] ??
+                    [];
 
-                const availableSlotIds =
-                  availableTimeSlots.map(
-                    (slot) => slot.id,
+                  const availableSlotIds =
+                    availableTimeSlots.map(
+                      (slot) => slot.id,
+                    );
+
+                  const selectedCount =
+                    availableSlotIds.filter(
+                      (slotId) =>
+                        selectedSlots.includes(
+                          slotId,
+                        ),
+                    ).length;
+
+                  const allSelected =
+                    availableSlotIds.length >
+                      0 &&
+                    availableSlotIds.every(
+                      (slotId) =>
+                        selectedSlots.includes(
+                          slotId,
+                        ),
+                    );
+
+                  return (
+                    <article
+                      key={dateKey}
+                      className="overflow-hidden rounded-[24px] border border-gray-200 bg-white shadow-sm"
+                    >
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setOpenDate(
+                            (current) =>
+                              current ===
+                              dateKey
+                                ? null
+                                : dateKey,
+                          )
+                        }
+                        className="flex w-full items-center justify-between px-4 py-4 text-left"
+                      >
+                        <div>
+                          <p className="text-base font-bold text-gray-950">
+                            {formatFullDate(
+                              dateKey,
+                            )}
+                          </p>
+
+                          <p className="mt-1 text-xs text-gray-400">
+                            {selectedCount} of{" "}
+                            {
+                              availableTimeSlots.length
+                            }{" "}
+                            selected
+                          </p>
+                        </div>
+
+                        <span
+                          className={`material-symbols-rounded text-gray-500 transition-transform ${
+                            openDate === dateKey
+                              ? "rotate-180"
+                              : ""
+                          }`}
+                        >
+                          expand_more
+                        </span>
+                      </button>
+
+                      {openDate ===
+                        dateKey && (
+                        <div className="border-t border-gray-100 p-4">
+                          <div className="mb-3 flex justify-end">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                selectAllForDate(
+                                  dateKey,
+                                )
+                              }
+                              className={`rounded-full px-3 py-2 text-xs font-bold transition ${
+                                allSelected
+                                  ? "bg-violet-600 text-white"
+                                  : "bg-violet-50 text-violet-700"
+                              }`}
+                            >
+                              {allSelected
+                                ? "Clear all"
+                                : "Select all"}
+                            </button>
+                          </div>
+
+                          <div className="space-y-2">
+                            {availableTimeSlots.map(
+                              (slot) => {
+                                const selected =
+                                  selectedSlots.includes(
+                                    slot.id,
+                                  );
+
+                                return (
+                                  <button
+                                    key={
+                                      slot.id
+                                    }
+                                    type="button"
+                                    onClick={() =>
+                                      toggleTimeSlot(
+                                        dateKey,
+                                        slot.id,
+                                      )
+                                    }
+                                    className={`flex w-full items-center justify-between rounded-2xl border-2 px-4 py-4 text-left transition ${
+                                      selected
+                                        ? "border-violet-600 bg-violet-50"
+                                        : "border-gray-200 bg-white hover:border-violet-200"
+                                    }`}
+                                  >
+                                    <span
+                                      className={`text-sm font-bold ${
+                                        selected
+                                          ? "text-violet-700"
+                                          : "text-gray-800"
+                                      }`}
+                                    >
+                                      {
+                                        slot.label
+                                      }
+                                    </span>
+
+                                    <span
+                                      className={`flex h-6 w-6 items-center justify-center rounded-full ${
+                                        selected
+                                          ? "bg-violet-600 text-white"
+                                          : "border border-gray-300 bg-white text-transparent"
+                                      }`}
+                                    >
+                                      <span className="material-symbols-rounded text-[17px]">
+                                        check
+                                      </span>
+                                    </span>
+                                  </button>
+                                );
+                              },
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </article>
                   );
-
-                const selectedCount =
-                  availableSlotIds.filter((slotId) =>
-                    selectedSlots.includes(slotId),
-                  ).length;
-
-                const allSelected =
-                  availableSlotIds.length > 0 &&
-                  availableSlotIds.every((slotId) =>
-                    selectedSlots.includes(slotId),
-                  );
-
-                return (
-                  <article
-                    key={dateKey}
-                    className="overflow-hidden rounded-[24px] border border-gray-200 bg-white shadow-sm"
-                  >
-                   <button
-  type="button"
-  onClick={() =>
-    setOpenDate((current) =>
-      current === dateKey ? null : dateKey,
-    )
-  }
-  className="flex w-full items-center justify-between px-4 py-4 text-left"
->
-  <div>
-    <p className="text-base font-bold text-gray-950">
-      {formatFullDate(dateKey)}
-    </p>
-
-    <p className="mt-1 text-xs text-gray-400">
-      {selectedCount} of{" "}
-      {availableTimeSlots.length} selected
-    </p>
-  </div>
-
-  <span
-    className={`material-symbols-rounded text-gray-500 transition-transform ${
-      openDate === dateKey
-        ? "rotate-180"
-        : ""
-    }`}
-  >
-    expand_more
-  </span>
-</button>
-
-                  {openDate === dateKey && (
-  <div className="border-t border-gray-100 p-4">
-    <div className="mb-3 flex justify-end">
-      <button
-        type="button"
-        onClick={() =>
-          selectAllForDate(dateKey)
-        }
-        className={`rounded-full px-3 py-2 text-xs font-bold transition ${
-          allSelected
-            ? "bg-violet-600 text-white"
-            : "bg-violet-50 text-violet-700"
-        }`}
-      >
-        {allSelected
-          ? "Clear all"
-          : "Select all"}
-      </button>
-    </div>
-
-    <div className="space-y-2">
-      {availableTimeSlots.map((slot) => {
-        const selected =
-          selectedSlots.includes(slot.id);
-
-        return (
-          <button
-            key={slot.id}
-            type="button"
-            onClick={() =>
-              toggleTimeSlot(
-                dateKey,
-                slot.id,
-              )
-            }
-            className={`flex w-full items-center justify-between rounded-2xl border-2 px-4 py-4 text-left transition ${
-              selected
-                ? "border-violet-600 bg-violet-50"
-                : "border-gray-200 bg-white hover:border-violet-200"
-            }`}
-          >
-            <span
-              className={`text-sm font-bold ${
-                selected
-                  ? "text-violet-700"
-                  : "text-gray-800"
-              }`}
-            >
-              {slot.label}
-            </span>
-
-            <span
-              className={`flex h-6 w-6 items-center justify-center rounded-full ${
-                selected
-                  ? "bg-violet-600 text-white"
-                  : "border border-gray-300 bg-white text-transparent"
-              }`}
-            >
-              <span className="material-symbols-rounded text-[17px]">
-                check
-              </span>
-            </span>
-          </button>
-        );
-      })}
-    </div>
-  </div>
-)}
-                  </article>
-                );
-              })}
+                },
+              )}
             </section>
           )}
 
@@ -484,14 +674,25 @@ export default function AvailabilityPage() {
   );
 }
 
-function formatFullDate(dateKey: string) {
+function formatFullDate(
+  dateKey: string,
+) {
   const [year, month, day] = dateKey
     .split("-")
     .map(Number);
 
-  return new Intl.DateTimeFormat("en-US", {
-    weekday: "short",
-    month: "long",
-    day: "numeric",
-  }).format(new Date(year, month - 1, day));
+  if (!year || !month || !day) {
+    return dateKey;
+  }
+
+  return new Intl.DateTimeFormat(
+    "en-US",
+    {
+      weekday: "short",
+      month: "long",
+      day: "numeric",
+    },
+  ).format(
+    new Date(year, month - 1, day),
+  );
 }

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import MobileShell from "../components/MobileShell";
-
+import { supabase } from "../components/lib/supabase";
 const WEEKDAYS = ["S", "M", "T", "W", "T", "F", "S"];
 
 const TIME_SLOTS = [
@@ -31,6 +31,7 @@ const TIME_SLOTS = [
 ];
 
 type MeetupDraft = {
+  meetupId: string;
   meetupName: string;
   location: string;
   month: string;
@@ -50,21 +51,25 @@ export default function CreateMeetupPage() {
 
   const [selectedMonth, setSelectedMonth] = useState(() => {
     const year = today.getFullYear();
-    const month = String(today.getMonth() + 1).padStart(2, "0");
+    const month = String(
+      today.getMonth() + 1,
+    ).padStart(2, "0");
 
     return `${year}-${month}`;
   });
 
-  const [selectedDates, setSelectedDates] = useState<string[]>(
-    [],
-  );
+  const [selectedDates, setSelectedDates] = useState<
+    string[]
+  >([]);
 
-  const [selectedSlots, setSelectedSlots] = useState<string[]>(
-    TIME_SLOTS.map((slot) => slot.id),
-  );
+  const [selectedSlots, setSelectedSlots] = useState<
+    string[]
+  >(TIME_SLOTS.map((slot) => slot.id));
 
   const [responseDeadline, setResponseDeadline] =
     useState("");
+
+  const [isCreating, setIsCreating] = useState(false);
 
   const calendarDays = useMemo(
     () => buildCalendarDays(selectedMonth),
@@ -94,6 +99,7 @@ export default function CreateMeetupPage() {
     );
 
     const newYear = newDate.getFullYear();
+
     const newMonth = String(
       newDate.getMonth() + 1,
     ).padStart(2, "0");
@@ -131,7 +137,11 @@ export default function CreateMeetupPage() {
     );
   }
 
-  function handleCreateMeetup() {
+  async function handleCreateMeetup() {
+    if (isCreating) {
+      return;
+    }
+
     if (!meetupName.trim()) {
       alert("Please enter a meetup name.");
       return;
@@ -174,23 +184,76 @@ export default function CreateMeetupPage() {
       return;
     }
 
-    const meetupDraft: MeetupDraft = {
-      meetupName: meetupName.trim(),
-      location: location.trim(),
-      month: selectedMonth,
-      candidateDates: selectedDates,
-      timeSlots: selectedSlots,
-      responseDeadline,
-      inviteCode: generateInviteCode(),
-      updatedAt: new Date().toISOString(),
-    };
+    setIsCreating(true);
 
-    sessionStorage.setItem(
-      "boardmeet-create-draft",
-      JSON.stringify(meetupDraft),
-    );
+    const inviteCode = generateInviteCode();
 
-    router.push("/create/share");
+    try {
+      const { data, error } = await supabase
+        .from("meetups")
+        .insert({
+          invite_code: inviteCode,
+          meetup_name: meetupName.trim(),
+          location: location.trim(),
+          month: selectedMonth,
+          candidate_dates: selectedDates,
+          time_slots: selectedSlots,
+          response_deadline: responseDeadline,
+        })
+        .select("id")
+        .single();
+
+      if (error) {
+        console.error(
+          "Supabase create meetup error:",
+          error,
+        );
+
+        alert(
+          `Could not create the meetup.\n\n${error.message}`,
+        );
+
+        return;
+      }
+
+      if (!data?.id) {
+        alert(
+          "The meetup was created, but its ID could not be found.",
+        );
+
+        return;
+      }
+
+      const meetupDraft: MeetupDraft = {
+        meetupId: data.id,
+        meetupName: meetupName.trim(),
+        location: location.trim(),
+        month: selectedMonth,
+        candidateDates: selectedDates,
+        timeSlots: selectedSlots,
+        responseDeadline,
+        inviteCode,
+        updatedAt: new Date().toISOString(),
+      };
+
+      sessionStorage.setItem(
+        "boardmeet-create-draft",
+        JSON.stringify(meetupDraft),
+      );
+
+      router.push("/create/share");
+    } catch (error) {
+      console.error(
+        "Unexpected create meetup error:",
+        error,
+      );
+
+      alert(
+        "Something went wrong while creating the meetup.",
+      );
+    } finally {
+      setIsCreating(false);
+    }
   }
 
   return (
@@ -254,7 +317,8 @@ export default function CreateMeetupPage() {
                 }
                 placeholder="August Board Game Night"
                 maxLength={60}
-                className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-4 text-base text-gray-950 outline-none transition placeholder:text-gray-400 focus:border-violet-500 focus:ring-4 focus:ring-violet-100"
+                disabled={isCreating}
+                className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-4 text-base text-gray-950 outline-none transition placeholder:text-gray-400 focus:border-violet-500 focus:ring-4 focus:ring-violet-100 disabled:cursor-not-allowed disabled:opacity-60"
               />
 
               <div className="mt-2 flex justify-end">
@@ -287,14 +351,16 @@ export default function CreateMeetupPage() {
                   }
                   placeholder="Downtown Toronto"
                   maxLength={80}
-                  className="min-w-0 flex-1 bg-transparent py-4 text-base text-gray-950 outline-none placeholder:text-gray-400"
+                  disabled={isCreating}
+                  className="min-w-0 flex-1 bg-transparent py-4 text-base text-gray-950 outline-none placeholder:text-gray-400 disabled:cursor-not-allowed disabled:opacity-60"
                 />
 
                 {location.length > 0 && (
                   <button
                     type="button"
                     onClick={() => setLocation("")}
-                    className="ml-2 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-gray-400 transition hover:bg-gray-100 hover:text-gray-600"
+                    disabled={isCreating}
+                    className="ml-2 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-gray-400 transition hover:bg-gray-100 hover:text-gray-600 disabled:cursor-not-allowed disabled:opacity-60"
                     aria-label="Clear location"
                   >
                     <span className="material-symbols-rounded text-[19px]">
@@ -338,7 +404,8 @@ export default function CreateMeetupPage() {
                   <button
                     type="button"
                     onClick={() => changeMonth(-1)}
-                    className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-50 text-gray-700 transition hover:bg-violet-50"
+                    disabled={isCreating}
+                    className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-50 text-gray-700 transition hover:bg-violet-50 disabled:cursor-not-allowed disabled:opacity-60"
                     aria-label="Previous month"
                   >
                     <span className="material-symbols-rounded">
@@ -353,7 +420,8 @@ export default function CreateMeetupPage() {
                   <button
                     type="button"
                     onClick={() => changeMonth(1)}
-                    className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-50 text-gray-700 transition hover:bg-violet-50"
+                    disabled={isCreating}
+                    className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-50 text-gray-700 transition hover:bg-violet-50 disabled:cursor-not-allowed disabled:opacity-60"
                     aria-label="Next month"
                   >
                     <span className="material-symbols-rounded">
@@ -371,42 +439,43 @@ export default function CreateMeetupPage() {
                 </div>
 
                 <div className="mt-3 grid grid-cols-7 gap-y-2 text-center text-sm">
-                  {calendarDays.map(
-                    (calendarDay) => {
-                      if (!calendarDay.dateKey) {
-                        return (
-                          <div
-                            key={calendarDay.key}
-                            className="h-10"
-                          />
-                        );
-                      }
-
-                      const isSelected =
-                        selectedDates.includes(
-                          calendarDay.dateKey,
-                        );
-
+                  {calendarDays.map((calendarDay) => {
+                    if (!calendarDay.dateKey) {
                       return (
-                        <button
+                        <div
                           key={calendarDay.key}
-                          type="button"
-                         onClick={() => {
-  if (calendarDay.dateKey) {
-    toggleDate(calendarDay.dateKey);
-  }
-}}
-                          className={`mx-auto flex h-10 w-10 items-center justify-center rounded-full font-semibold transition ${
-                            isSelected
-                              ? "bg-violet-600 text-white shadow-md shadow-violet-200"
-                              : "text-gray-800 hover:bg-violet-50"
-                          }`}
-                        >
-                          {calendarDay.day}
-                        </button>
+                          className="h-10"
+                        />
                       );
-                    },
-                  )}
+                    }
+
+                    const isSelected =
+                      selectedDates.includes(
+                        calendarDay.dateKey,
+                      );
+
+                    return (
+                      <button
+                        key={calendarDay.key}
+                        type="button"
+                        disabled={isCreating}
+                        onClick={() => {
+                          if (calendarDay.dateKey) {
+                            toggleDate(
+                              calendarDay.dateKey,
+                            );
+                          }
+                        }}
+                        className={`mx-auto flex h-10 w-10 items-center justify-center rounded-full font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                          isSelected
+                            ? "bg-violet-600 text-white shadow-md shadow-violet-200"
+                            : "text-gray-800 hover:bg-violet-50"
+                        }`}
+                      >
+                        {calendarDay.day}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -416,10 +485,11 @@ export default function CreateMeetupPage() {
                     <button
                       key={dateKey}
                       type="button"
+                      disabled={isCreating}
                       onClick={() =>
                         toggleDate(dateKey)
                       }
-                      className="flex items-center gap-1 rounded-full bg-violet-100 px-3 py-2 text-xs font-bold text-violet-700"
+                      className="flex items-center gap-1 rounded-full bg-violet-100 px-3 py-2 text-xs font-bold text-violet-700 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       {formatDate(dateKey)}
 
@@ -454,10 +524,11 @@ export default function CreateMeetupPage() {
                     <button
                       key={slot.id}
                       type="button"
+                      disabled={isCreating}
                       onClick={() =>
                         toggleSlot(slot.id)
                       }
-                      className={`flex w-full items-center justify-between rounded-2xl border-2 px-4 py-4 text-left transition ${
+                      className={`flex w-full items-center justify-between rounded-2xl border-2 px-4 py-4 text-left transition disabled:cursor-not-allowed disabled:opacity-60 ${
                         selected
                           ? "border-violet-600 bg-violet-50"
                           : "border-gray-200 bg-white"
@@ -502,12 +573,13 @@ export default function CreateMeetupPage() {
                 type="date"
                 value={responseDeadline}
                 min={toDateInputValue(today)}
+                disabled={isCreating}
                 onChange={(event) =>
                   setResponseDeadline(
                     event.target.value,
                   )
                 }
-                className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-4 text-base text-gray-700 outline-none focus:border-violet-500 focus:ring-4 focus:ring-violet-100"
+                className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-4 text-base text-gray-700 outline-none focus:border-violet-500 focus:ring-4 focus:ring-violet-100 disabled:cursor-not-allowed disabled:opacity-60"
               />
 
               <p className="mt-2 text-xs leading-5 text-gray-400">
@@ -542,12 +614,21 @@ export default function CreateMeetupPage() {
           <button
             type="button"
             onClick={handleCreateMeetup}
-            className="flex w-full items-center justify-center rounded-2xl bg-violet-600 px-5 py-4 text-base font-bold text-white shadow-lg shadow-violet-200 transition hover:bg-violet-700 active:scale-[0.99]"
+            disabled={isCreating}
+            className="flex w-full items-center justify-center rounded-2xl bg-violet-600 px-5 py-4 text-base font-bold text-white shadow-lg shadow-violet-200 transition hover:bg-violet-700 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60"
           >
-            Create Meetup
+            {isCreating
+              ? "Creating Meetup..."
+              : "Create Meetup"}
 
-            <span className="material-symbols-rounded ml-2 text-[20px]">
-              arrow_forward
+            <span
+              className={`material-symbols-rounded ml-2 text-[20px] ${
+                isCreating ? "animate-spin" : ""
+              }`}
+            >
+              {isCreating
+                ? "progress_activity"
+                : "arrow_forward"}
             </span>
           </button>
         </div>

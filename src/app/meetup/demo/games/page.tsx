@@ -7,8 +7,7 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import MobileShell from "../../../components/MobileShell";
-
-type Game = {
+import { supabase } from "../../../components/lib/supabase";type Game = {
   id: string;
   name: string;
   description: string;
@@ -16,30 +15,35 @@ type Game = {
   addedBy?: string;
 };
 
-type ParticipantData = {
-  name?: string;
+type JoinedMeetup = {
+  id: string;
+  invite_code: string;
+  meetup_name: string;
+  location: string | null;
+  month: string | null;
+  candidate_dates: string[];
+  time_slots: string[];
+  response_deadline: string | null;
+  created_at: string;
 };
 
-type MeetupDraft = {
-  meetupName?: string;
+type ParticipantData = {
+  name?: string;
+  meetupId?: string;
   inviteCode?: string;
 };
 
 type AvailabilityData = {
+  meetupId?: string;
+  inviteCode?: string;
+  participantName?: string;
   availability?: Record<string, string[]>;
-};
-
-type MeetupResponse = {
-  id: string;
-  inviteCode: string;
-  participantName: string;
-  availability: Record<string, string[]>;
-  selectedGameIds: string[];
-  selectedGames: string[];
-  submittedAt: string;
+  updatedAt?: string;
 };
 
 type SavedGamesData = {
+  meetupId?: string;
+  inviteCode?: string;
   games?: Game[];
   selectedGameIds?: string[];
   votes?: string[];
@@ -77,12 +81,11 @@ const DEFAULT_GAMES: Game[] = [
 export default function GamesPage() {
   const router = useRouter();
 
+  const [meetup, setMeetup] =
+    useState<JoinedMeetup | null>(null);
+
   const [participantName, setParticipantName] =
     useState("Guest");
-
-  const [meetupName, setMeetupName] = useState(
-    "Board Game Meetup",
-  );
 
   const [games, setGames] =
     useState<Game[]>(DEFAULT_GAMES);
@@ -99,55 +102,186 @@ export default function GamesPage() {
   const [isLoaded, setIsLoaded] =
     useState(false);
 
+  const [isSubmitting, setIsSubmitting] =
+    useState(false);
+
   useEffect(() => {
+    const savedMeetup =
+      sessionStorage.getItem(
+        "boardmeet-joined-meetup",
+      );
+
+    if (!savedMeetup) {
+      setIsLoaded(true);
+      router.replace("/join");
+      return;
+    }
+
+    let parsedMeetup: JoinedMeetup;
+
+    try {
+      parsedMeetup = JSON.parse(
+        savedMeetup,
+      ) as JoinedMeetup;
+
+      if (
+        !parsedMeetup.id ||
+        !parsedMeetup.invite_code ||
+        !parsedMeetup.meetup_name
+      ) {
+        throw new Error(
+          "Invalid meetup information.",
+        );
+      }
+
+      setMeetup(parsedMeetup);
+    } catch (error) {
+      console.error(
+        "Could not read boardmeet-joined-meetup.",
+        error,
+      );
+
+      sessionStorage.removeItem(
+        "boardmeet-joined-meetup",
+      );
+
+      sessionStorage.removeItem(
+        "boardmeet-joined-code",
+      );
+
+      setIsLoaded(true);
+      router.replace("/join");
+      return;
+    }
+
     const savedParticipant =
       sessionStorage.getItem(
         "boardmeet-participant",
       );
 
-    if (savedParticipant) {
-      try {
-        const parsedParticipant = JSON.parse(
-          savedParticipant,
-        ) as ParticipantData;
-
-        if (parsedParticipant.name?.trim()) {
-          setParticipantName(
-            parsedParticipant.name.trim(),
-          );
-        }
-      } catch {
-        console.error(
-          "Could not read boardmeet-participant.",
-        );
-      }
+    if (!savedParticipant) {
+      setIsLoaded(true);
+      router.replace("/meetup/demo");
+      return;
     }
 
-    const savedDraft = sessionStorage.getItem(
-      "boardmeet-create-draft",
-    );
+    let parsedParticipant: ParticipantData;
 
-    if (savedDraft) {
-      try {
-        const parsedDraft = JSON.parse(
-          savedDraft,
-        ) as MeetupDraft;
+    try {
+      parsedParticipant = JSON.parse(
+        savedParticipant,
+      ) as ParticipantData;
 
-        if (parsedDraft.meetupName?.trim()) {
-          setMeetupName(
-            parsedDraft.meetupName.trim(),
-          );
-        }
-      } catch {
-        console.error(
-          "Could not read boardmeet-create-draft.",
+      if (!parsedParticipant.name?.trim()) {
+        throw new Error(
+          "Participant name is missing.",
         );
       }
+
+      const belongsToCurrentMeetup =
+        !parsedParticipant.meetupId ||
+        parsedParticipant.meetupId ===
+          parsedMeetup.id;
+
+      if (!belongsToCurrentMeetup) {
+        sessionStorage.removeItem(
+          "boardmeet-participant",
+        );
+
+        sessionStorage.removeItem(
+          "boardmeet-availability",
+        );
+
+        sessionStorage.removeItem(
+          "boardmeet-games",
+        );
+
+        setIsLoaded(true);
+        router.replace("/meetup/demo");
+        return;
+      }
+
+      setParticipantName(
+        parsedParticipant.name.trim(),
+      );
+    } catch (error) {
+      console.error(
+        "Could not read boardmeet-participant.",
+        error,
+      );
+
+      setIsLoaded(true);
+      router.replace("/meetup/demo");
+      return;
     }
 
-    const savedGames = sessionStorage.getItem(
-      "boardmeet-games",
-    );
+    const savedAvailability =
+      sessionStorage.getItem(
+        "boardmeet-availability",
+      );
+
+    if (!savedAvailability) {
+      setIsLoaded(true);
+
+      router.replace(
+        "/meetup/demo/availability",
+      );
+
+      return;
+    }
+
+    try {
+      const parsedAvailability =
+        JSON.parse(
+          savedAvailability,
+        ) as AvailabilityData;
+
+      const belongsToCurrentMeetup =
+        !parsedAvailability.meetupId ||
+        parsedAvailability.meetupId ===
+          parsedMeetup.id;
+
+      const hasAvailability =
+        parsedAvailability.availability &&
+        Object.values(
+          parsedAvailability.availability,
+        ).some(
+          (timeSlots) =>
+            Array.isArray(timeSlots) &&
+            timeSlots.length > 0,
+        );
+
+      if (
+        !belongsToCurrentMeetup ||
+        !hasAvailability
+      ) {
+        setIsLoaded(true);
+
+        router.replace(
+          "/meetup/demo/availability",
+        );
+
+        return;
+      }
+    } catch (error) {
+      console.error(
+        "Could not read boardmeet-availability.",
+        error,
+      );
+
+      setIsLoaded(true);
+
+      router.replace(
+        "/meetup/demo/availability",
+      );
+
+      return;
+    }
+
+    const savedGames =
+      sessionStorage.getItem(
+        "boardmeet-games",
+      );
 
     if (savedGames) {
       try {
@@ -155,31 +289,53 @@ export default function GamesPage() {
           savedGames,
         ) as SavedGamesData;
 
-        if (
-          Array.isArray(parsedGames.games) &&
-          parsedGames.games.length > 0
-        ) {
-          setGames(parsedGames.games);
-        }
+        const belongsToCurrentMeetup =
+          !parsedGames.meetupId ||
+          parsedGames.meetupId ===
+            parsedMeetup.id;
+
+        const belongsToCurrentParticipant =
+          !parsedGames.participantName ||
+          parsedGames.participantName
+            .trim()
+            .toLowerCase() ===
+            parsedParticipant.name
+              .trim()
+              .toLowerCase();
 
         if (
-          Array.isArray(
-            parsedGames.selectedGameIds,
-          )
+          belongsToCurrentMeetup &&
+          belongsToCurrentParticipant
         ) {
-          setSelectedGameIds(
-            parsedGames.selectedGameIds,
-          );
+          if (
+            Array.isArray(
+              parsedGames.games,
+            ) &&
+            parsedGames.games.length > 0
+          ) {
+            setGames(parsedGames.games);
+          }
+
+          if (
+            Array.isArray(
+              parsedGames.selectedGameIds,
+            )
+          ) {
+            setSelectedGameIds(
+              parsedGames.selectedGameIds,
+            );
+          }
         }
-      } catch {
+      } catch (error) {
         console.error(
           "Could not read boardmeet-games.",
+          error,
         );
       }
     }
 
     setIsLoaded(true);
-  }, []);
+  }, [router]);
 
   function toggleGame(gameId: string) {
     setErrorMessage("");
@@ -205,7 +361,6 @@ export default function GamesPage() {
       setErrorMessage(
         "Please enter a game name.",
       );
-
       return;
     }
 
@@ -221,7 +376,6 @@ export default function GamesPage() {
       setErrorMessage(
         "This game is already in the suggestion list.",
       );
-
       return;
     }
 
@@ -247,10 +401,80 @@ export default function GamesPage() {
     setErrorMessage("");
   }
 
-  function handleSubmit() {
+  async function handleSubmit() {
+    if (!meetup || isSubmitting) {
+      return;
+    }
+
+    setErrorMessage("");
+
     if (selectedGameIds.length === 0) {
       setErrorMessage(
         "Please select at least one game before submitting.",
+      );
+
+      window.scrollTo({
+        top: 0,
+        behavior: "smooth",
+      });
+
+      return;
+    }
+
+    const savedAvailability =
+      sessionStorage.getItem(
+        "boardmeet-availability",
+      );
+
+    if (!savedAvailability) {
+      setErrorMessage(
+        "Your availability could not be found. Please select your available times again.",
+      );
+
+      return;
+    }
+
+    let availability: Record<
+      string,
+      string[]
+    > = {};
+
+    try {
+      const parsedAvailability =
+        JSON.parse(
+          savedAvailability,
+        ) as AvailabilityData;
+
+      const belongsToCurrentMeetup =
+        !parsedAvailability.meetupId ||
+        parsedAvailability.meetupId ===
+          meetup.id;
+
+      if (
+        belongsToCurrentMeetup &&
+        parsedAvailability.availability
+      ) {
+        availability =
+          parsedAvailability.availability;
+      }
+    } catch (error) {
+      console.error(
+        "Could not read boardmeet-availability.",
+        error,
+      );
+    }
+
+    const hasAvailability = Object.values(
+      availability,
+    ).some(
+      (timeSlots) =>
+        Array.isArray(timeSlots) &&
+        timeSlots.length > 0,
+    );
+
+    if (!hasAvailability) {
+      setErrorMessage(
+        "Your availability could not be found. Please select your available times again.",
       );
 
       window.scrollTo({
@@ -274,145 +498,80 @@ export default function GamesPage() {
     const submittedAt =
       new Date().toISOString();
 
-    const savedAvailability =
-      sessionStorage.getItem(
-        "boardmeet-availability",
+    setIsSubmitting(true);
+
+    const { data, error } = await supabase
+      .from("responses")
+      .upsert(
+        {
+          meetup_id: meetup.id,
+          participant_name:
+            participantName.trim(),
+          availability,
+          selected_game_ids:
+            selectedGameIds,
+          selected_games:
+            selectedGameNames,
+          submitted_at: submittedAt,
+          updated_at: submittedAt,
+        },
+        {
+          onConflict:
+            "meetup_id,participant_name",
+        },
+      )
+      .select()
+      .single();
+
+    if (error) {
+      console.error(
+        "Supabase response submission failed:",
+        error,
       );
 
-    let availability: Record<
-      string,
-      string[]
-    > = {};
+      setErrorMessage(
+        `Could not submit your response: ${error.message}`,
+      );
 
-    if (savedAvailability) {
-      try {
-        const parsedAvailability =
-          JSON.parse(
-            savedAvailability,
-          ) as AvailabilityData;
+      setIsSubmitting(false);
 
-        availability =
-          parsedAvailability.availability ??
-          {};
-      } catch {
-        console.error(
-          "Could not read boardmeet-availability.",
-        );
-      }
-    }
+      window.scrollTo({
+        top: 0,
+        behavior: "smooth",
+      });
 
-    const savedDraft = sessionStorage.getItem(
-      "boardmeet-create-draft",
-    );
-
-    let inviteCode = "demo";
-
-    if (savedDraft) {
-      try {
-        const parsedDraft = JSON.parse(
-          savedDraft,
-        ) as MeetupDraft;
-
-        if (
-          parsedDraft.inviteCode?.trim()
-        ) {
-          inviteCode =
-            parsedDraft.inviteCode.trim();
-        }
-      } catch {
-        console.error(
-          "Could not read boardmeet-create-draft.",
-        );
-      }
+      return;
     }
 
     sessionStorage.setItem(
       "boardmeet-games",
       JSON.stringify({
-        participantName,
+        meetupId: meetup.id,
+        inviteCode: meetup.invite_code,
+        participantName:
+          participantName.trim(),
         games,
         selectedGameIds,
         votes: selectedGameNames,
+        responseId: data.id,
         submittedAt,
       }),
     );
 
-    const newResponse: MeetupResponse = {
-      id: createResponseId(
-        inviteCode,
-        participantName,
-      ),
-      inviteCode,
-      participantName,
-      availability,
-      selectedGameIds,
-      selectedGames: selectedGameNames,
-      submittedAt,
-    };
-
-    const savedResponses =
-      sessionStorage.getItem(
-        "boardmeet-responses",
-      );
-
-    let existingResponses: MeetupResponse[] =
-      [];
-
-    if (savedResponses) {
-      try {
-        const parsedResponses =
-          JSON.parse(
-            savedResponses,
-          ) as MeetupResponse[];
-
-        if (Array.isArray(parsedResponses)) {
-          existingResponses =
-            parsedResponses;
-        }
-      } catch {
-        console.error(
-          "Could not read boardmeet-responses.",
-        );
-      }
-    }
-
-    const normalizedParticipantName =
-      participantName
-        .trim()
-        .toLowerCase();
-
-    const existingResponseIndex =
-      existingResponses.findIndex(
-        (response) =>
-          response.inviteCode ===
-            inviteCode &&
-          response.participantName
-            .trim()
-            .toLowerCase() ===
-            normalizedParticipantName,
-      );
-
-    let updatedResponses: MeetupResponse[];
-
-    if (existingResponseIndex >= 0) {
-      updatedResponses =
-        existingResponses.map(
-          (response, index) =>
-            index ===
-            existingResponseIndex
-              ? newResponse
-              : response,
-        );
-    } else {
-      updatedResponses = [
-        ...existingResponses,
-        newResponse,
-      ];
-    }
-
     sessionStorage.setItem(
-      "boardmeet-responses",
-      JSON.stringify(updatedResponses),
+      "boardmeet-submitted-response",
+      JSON.stringify({
+        id: data.id,
+        meetupId: meetup.id,
+        inviteCode: meetup.invite_code,
+        participantName:
+          participantName.trim(),
+        availability,
+        selectedGameIds,
+        selectedGames:
+          selectedGameNames,
+        submittedAt,
+      }),
     );
 
     router.push(
@@ -430,12 +589,16 @@ export default function GamesPage() {
             </span>
 
             <p className="text-sm font-semibold text-gray-500">
-              Loading games
+              Loading games...
             </p>
           </div>
         </div>
       </MobileShell>
     );
+  }
+
+  if (!meetup) {
+    return null;
   }
 
   return (
@@ -450,7 +613,8 @@ export default function GamesPage() {
                   "/meetup/demo/availability",
                 )
               }
-              className="flex h-10 w-10 items-center justify-center rounded-full border border-gray-100 bg-white text-gray-700 shadow-sm transition active:scale-95"
+              disabled={isSubmitting}
+              className="flex h-10 w-10 items-center justify-center rounded-full border border-gray-100 bg-white text-gray-700 shadow-sm transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
               aria-label="Go back"
             >
               <span className="material-symbols-rounded">
@@ -458,13 +622,13 @@ export default function GamesPage() {
               </span>
             </button>
 
-            <div className="text-center">
+            <div className="min-w-0 px-3 text-center">
               <p className="text-xs font-medium text-gray-400">
                 BoardMeet
               </p>
 
               <p className="max-w-[200px] truncate text-sm font-bold text-gray-900">
-                {meetupName}
+                {meetup.meetup_name}
               </p>
             </div>
 
@@ -498,10 +662,9 @@ export default function GamesPage() {
               </h1>
 
               <p className="mt-3 max-w-[310px] text-sm leading-6 text-violet-100">
-                Vote for every game you
-                would be happy to play. You
-                can also recommend another
-                game.
+                Vote for every game you would be
+                happy to play. You can also
+                recommend another game.
               </p>
 
               <div className="mt-6 flex items-center gap-3 rounded-2xl bg-white/10 p-3 backdrop-blur">
@@ -511,7 +674,7 @@ export default function GamesPage() {
                   </span>
                 </div>
 
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <p className="text-xs text-violet-100">
                     Voting as
                   </p>
@@ -520,6 +683,10 @@ export default function GamesPage() {
                     {participantName}
                   </p>
                 </div>
+
+                <span className="shrink-0 font-mono text-xs font-bold text-violet-100">
+                  {meetup.invite_code}
+                </span>
               </div>
             </div>
           </section>
@@ -535,11 +702,10 @@ export default function GamesPage() {
 
               <div className="flex-1">
                 <p className="text-sm font-bold text-red-800">
-                  Something needs your
-                  attention
+                  Something needs your attention
                 </p>
 
-                <p className="mt-1 text-sm leading-5 text-red-700">
+                <p className="mt-1 break-words text-sm leading-5 text-red-700">
                   {errorMessage}
                 </p>
               </div>
@@ -572,14 +738,13 @@ export default function GamesPage() {
               </div>
 
               <div className="shrink-0 rounded-full bg-violet-100 px-3 py-2 text-xs font-bold text-violet-700">
-                {selectedGameIds.length}{" "}
-                selected
+                {selectedGameIds.length} selected
               </div>
             </div>
 
             <p className="mt-3 text-sm leading-6 text-gray-500">
-              Tap a card to select or
-              remove a game from your vote.
+              Tap a card to select or remove a game
+              from your vote.
             </p>
           </section>
 
@@ -597,8 +762,9 @@ export default function GamesPage() {
                   onClick={() =>
                     toggleGame(game.id)
                   }
+                  disabled={isSubmitting}
                   aria-pressed={selected}
-                  className={`group flex w-full items-center gap-4 rounded-[24px] border-2 p-4 text-left shadow-sm transition duration-200 active:scale-[0.98] ${
+                  className={`group flex w-full items-center gap-4 rounded-[24px] border-2 p-4 text-left shadow-sm transition duration-200 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 ${
                     selected
                       ? "border-violet-600 bg-violet-50 shadow-violet-100"
                       : "border-gray-100 bg-white hover:border-violet-200"
@@ -672,15 +838,13 @@ export default function GamesPage() {
 
               <div>
                 <h2 className="text-lg font-bold text-gray-950">
-                  Recommend another
-                  game
+                  Recommend another game
                 </h2>
 
                 <p className="mt-1 text-sm leading-5 text-gray-500">
-                  Add a game that is not
-                  currently listed. It will
-                  automatically be included
-                  in your vote.
+                  Add a game that is not currently
+                  listed. It will automatically be
+                  included in your vote.
                 </p>
               </div>
             </div>
@@ -708,6 +872,7 @@ export default function GamesPage() {
                     id="game-recommendation"
                     type="text"
                     value={recommendation}
+                    disabled={isSubmitting}
                     onChange={(event) => {
                       setRecommendation(
                         event.target.value,
@@ -717,13 +882,14 @@ export default function GamesPage() {
                     }}
                     placeholder="e.g. Ticket to Ride"
                     maxLength={50}
-                    className="h-14 w-full rounded-2xl border border-gray-200 bg-gray-50 pl-12 pr-4 text-sm font-medium text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-violet-500 focus:bg-white focus:ring-4 focus:ring-violet-100"
+                    className="h-14 w-full rounded-2xl border border-gray-200 bg-gray-50 pl-12 pr-4 text-sm font-medium text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-violet-500 focus:bg-white focus:ring-4 focus:ring-violet-100 disabled:cursor-not-allowed disabled:opacity-60"
                   />
                 </div>
 
                 <button
                   type="submit"
-                  className="flex h-14 shrink-0 items-center justify-center gap-1 rounded-2xl bg-gray-950 px-4 text-sm font-bold text-white transition active:scale-95"
+                  disabled={isSubmitting}
+                  className="flex h-14 shrink-0 items-center justify-center gap-1 rounded-2xl bg-gray-950 px-4 text-sm font-bold text-white transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <span className="material-symbols-rounded text-[20px]">
                     add
@@ -735,8 +901,7 @@ export default function GamesPage() {
 
               <div className="mt-2 flex justify-end">
                 <p className="text-xs text-gray-400">
-                  {recommendation.length}
-                  /50
+                  {recommendation.length}/50
                 </p>
               </div>
             </form>
@@ -748,9 +913,9 @@ export default function GamesPage() {
             </span>
 
             <p className="text-sm leading-6 text-blue-800">
-              You may vote for multiple
-              games. The host will see the
-              games ranked by total votes.
+              You may vote for multiple games. The
+              host will see the games ranked by
+              total votes.
             </p>
           </section>
         </main>
@@ -759,13 +924,26 @@ export default function GamesPage() {
           <button
             type="button"
             onClick={handleSubmit}
-            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-violet-600 px-5 py-4 text-base font-bold text-white shadow-lg shadow-violet-200 transition hover:bg-violet-700 active:scale-[0.99]"
+            disabled={isSubmitting}
+            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-violet-600 px-5 py-4 text-base font-bold text-white shadow-lg shadow-violet-200 transition hover:bg-violet-700 active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-violet-400"
           >
-            Submit Response
+            {isSubmitting ? (
+              <>
+                <span className="material-symbols-rounded animate-spin text-[21px]">
+                  progress_activity
+                </span>
 
-            <span className="material-symbols-rounded text-[21px]">
-              arrow_forward
-            </span>
+                Submitting...
+              </>
+            ) : (
+              <>
+                Submit Response
+
+                <span className="material-symbols-rounded text-[21px]">
+                  arrow_forward
+                </span>
+              </>
+            )}
           </button>
         </div>
       </div>
@@ -786,23 +964,4 @@ function createGameId(gameName: string) {
   return `${
     normalizedName || "game"
   }-${Date.now()}`;
-}
-
-function createResponseId(
-  inviteCode: string,
-  participantName: string,
-) {
-  const normalizedName =
-    participantName
-      .trim()
-      .toLowerCase()
-      .replace(
-        /[^a-z0-9가-힣]+/g,
-        "-",
-      )
-      .replace(/^-+|-+$/g, "");
-
-  return `${inviteCode}-${
-    normalizedName || "guest"
-  }`;
 }

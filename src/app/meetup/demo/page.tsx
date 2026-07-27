@@ -1,6 +1,10 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import {
+  FormEvent,
+  useEffect,
+  useState,
+} from "react";
 import { useRouter } from "next/navigation";
 import MobileShell from "../../components/MobileShell";
 
@@ -8,29 +12,35 @@ type ParticipantData = {
   name?: string;
 };
 
-type MeetupDraft = {
-  meetupName?: string;
-  location?: string;
+type JoinedMeetup = {
+  id: string;
+  invite_code: string;
+  meetup_name: string;
+  location: string | null;
+  month: string | null;
+  candidate_dates: string[];
+  time_slots: string[];
+  response_deadline: string | null;
+  created_at: string;
 };
 
-export default function JoinMeetupPage() {
+export default function MeetupParticipantPage() {
   const router = useRouter();
 
   const [name, setName] = useState("");
   const [error, setError] = useState("");
 
-  const [meetupName, setMeetupName] = useState(
-    "Board Game Meetup",
-  );
+  const [meetup, setMeetup] =
+    useState<JoinedMeetup | null>(null);
 
-  const [location, setLocation] = useState(
-    "Location not set",
-  );
+  const [isLoading, setIsLoading] =
+    useState(true);
 
   useEffect(() => {
-    const savedParticipant = sessionStorage.getItem(
-      "boardmeet-participant",
-    );
+    const savedParticipant =
+      sessionStorage.getItem(
+        "boardmeet-participant",
+      );
 
     if (savedParticipant) {
       try {
@@ -48,30 +58,60 @@ export default function JoinMeetupPage() {
       }
     }
 
-    const savedDraft = sessionStorage.getItem(
-      "boardmeet-create-draft",
-    );
+    const savedMeetup =
+      sessionStorage.getItem(
+        "boardmeet-joined-meetup",
+      );
 
-    if (savedDraft) {
-      try {
-        const draft = JSON.parse(
-          savedDraft,
-        ) as MeetupDraft;
-
-        if (draft.meetupName?.trim()) {
-          setMeetupName(draft.meetupName.trim());
-        }
-
-        if (draft.location?.trim()) {
-          setLocation(draft.location.trim());
-        }
-      } catch {
-        console.error(
-          "Could not read meetup data.",
-        );
-      }
+    if (!savedMeetup) {
+      setIsLoading(false);
+      router.replace("/join");
+      return;
     }
-  }, []);
+
+    try {
+      const parsedMeetup = JSON.parse(
+        savedMeetup,
+      ) as JoinedMeetup;
+
+      if (
+        !parsedMeetup.id ||
+        !parsedMeetup.invite_code ||
+        !parsedMeetup.meetup_name
+      ) {
+        sessionStorage.removeItem(
+          "boardmeet-joined-meetup",
+        );
+
+        sessionStorage.removeItem(
+          "boardmeet-joined-code",
+        );
+
+        setIsLoading(false);
+        router.replace("/join");
+        return;
+      }
+
+      setMeetup(parsedMeetup);
+      setIsLoading(false);
+    } catch (error) {
+      console.error(
+        "Could not read joined meetup data.",
+        error,
+      );
+
+      sessionStorage.removeItem(
+        "boardmeet-joined-meetup",
+      );
+
+      sessionStorage.removeItem(
+        "boardmeet-joined-code",
+      );
+
+      setIsLoading(false);
+      router.replace("/join");
+    }
+  }, [router]);
 
   function handleSubmit(
     event: FormEvent<HTMLFormElement>,
@@ -85,15 +125,51 @@ export default function JoinMeetupPage() {
       return;
     }
 
+    if (!meetup) {
+      setError(
+        "The meetup information could not be found.",
+      );
+      return;
+    }
+
     sessionStorage.setItem(
       "boardmeet-participant",
       JSON.stringify({
         name: trimmedName,
+        meetupId: meetup.id,
+        inviteCode: meetup.invite_code,
       }),
     );
 
     router.push("/meetup/demo/availability");
   }
+
+  if (isLoading) {
+    return (
+      <MobileShell>
+        <div className="flex min-h-screen items-center justify-center bg-[#FAF9FF]">
+          <div className="flex flex-col items-center">
+            <span className="material-symbols-rounded animate-spin text-[36px] text-violet-600">
+              progress_activity
+            </span>
+
+            <p className="mt-3 text-sm font-semibold text-gray-500">
+              Loading meetup...
+            </p>
+          </div>
+        </div>
+      </MobileShell>
+    );
+  }
+
+  if (!meetup) {
+    return null;
+  }
+
+  const meetupName = meetup.meetup_name;
+  const location =
+    meetup.location?.trim() ||
+    "Location not set";
 
   return (
     <MobileShell>
@@ -278,6 +354,30 @@ export default function JoinMeetupPage() {
                   </p>
                 </div>
               </div>
+
+              <div className="mt-3 grid grid-cols-2 gap-3">
+                <div className="rounded-2xl bg-gray-50 p-3">
+                  <p className="text-xs font-semibold text-gray-400">
+                    Invite code
+                  </p>
+
+                  <p className="mt-1 truncate font-mono text-sm font-bold text-gray-800">
+                    {meetup.invite_code}
+                  </p>
+                </div>
+
+                <div className="rounded-2xl bg-gray-50 p-3">
+                  <p className="text-xs font-semibold text-gray-400">
+                    Deadline
+                  </p>
+
+                  <p className="mt-1 truncate text-sm font-bold text-gray-800">
+                    {formatDeadline(
+                      meetup.response_deadline,
+                    )}
+                  </p>
+                </div>
+              </div>
             </section>
 
             <div className="mt-auto pt-8">
@@ -293,8 +393,9 @@ export default function JoinMeetupPage() {
               </button>
 
               <p className="mt-4 text-center text-xs leading-5 text-gray-400">
-                No account required. Your response is
-                saved on this device during the demo.
+                No account required. Your selections
+                will be saved while you complete the
+                response.
               </p>
             </div>
           </form>
@@ -302,4 +403,26 @@ export default function JoinMeetupPage() {
       </div>
     </MobileShell>
   );
+}
+
+function formatDeadline(
+  deadline: string | null,
+) {
+  if (!deadline) {
+    return "Not set";
+  }
+
+  const [year, month, day] = deadline
+    .split("-")
+    .map(Number);
+
+  if (!year || !month || !day) {
+    return deadline;
+  }
+
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(new Date(year, month - 1, day));
 }

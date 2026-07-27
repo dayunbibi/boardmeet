@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import {
+  Suspense,
   useCallback,
   useEffect,
   useRef,
@@ -12,20 +13,30 @@ import {
   useSearchParams,
 } from "next/navigation";
 import MobileShell from "../components/MobileShell";
+import { supabase } from "../components/lib/supabase";
 
-type MeetupDraft = {
-  meetupName?: string;
-  inviteCode?: string;
+type Meetup = {
+  id: string;
+  invite_code: string;
+  meetup_name: string;
+  location: string | null;
+  month: string | null;
+  candidate_dates: string[];
+  time_slots: string[];
+  response_deadline: string | null;
+  created_at: string;
 };
 
-export default function JoinMeetupPage() {
+function JoinMeetupContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const hasAutoJoined = useRef(false);
 
   const [inviteCode, setInviteCode] = useState("");
-  const [errorMessage, setErrorMessage] = useState("");
-  const [isJoining, setIsJoining] = useState(false);
+  const [errorMessage, setErrorMessage] =
+    useState("");
+  const [isJoining, setIsJoining] =
+    useState(false);
 
   function handleCodeChange(value: string) {
     const formattedCode = value
@@ -38,7 +49,11 @@ export default function JoinMeetupPage() {
   }
 
   const handleJoinMeetup = useCallback(
-    (code?: string) => {
+    async (code?: string) => {
+      if (isJoining) {
+        return;
+      }
+
       const enteredCode = (
         code ?? inviteCode
       )
@@ -52,46 +67,66 @@ export default function JoinMeetupPage() {
         return;
       }
 
-      const savedDraft = sessionStorage.getItem(
-        "boardmeet-create-draft",
-      );
-
-      if (!savedDraft) {
+      if (!/^BM-[A-Z0-9]{6}$/.test(enteredCode)) {
         setErrorMessage(
-          "No meetup was found on this device.",
+          "Please enter a valid invite code.",
         );
         return;
       }
 
+      setIsJoining(true);
+      setErrorMessage("");
+
       try {
-        const draft = JSON.parse(
-          savedDraft,
-        ) as MeetupDraft;
+        const { data, error } = await supabase
+          .from("meetups")
+          .select(
+            `
+              id,
+              invite_code,
+              meetup_name,
+              location,
+              month,
+              candidate_dates,
+              time_slots,
+              response_deadline,
+              created_at
+            `,
+          )
+          .eq("invite_code", enteredCode)
+          .maybeSingle();
 
-        const savedInviteCode = draft.inviteCode
-          ?.trim()
-          .toUpperCase();
-
-        if (!savedInviteCode) {
-          setErrorMessage(
-            "This meetup does not have an invite code.",
+        if (error) {
+          console.error(
+            "Supabase meetup lookup error:",
+            error,
           );
+
+          setErrorMessage(
+            "The meetup could not be loaded. Please try again.",
+          );
+
           return;
         }
 
-        if (enteredCode !== savedInviteCode) {
+        if (!data) {
           setErrorMessage(
-            "That invite code is not correct.",
+            "No meetup was found with that invite code.",
           );
+
           return;
         }
 
-        setIsJoining(true);
-        setErrorMessage("");
+        const meetup = data as Meetup;
 
         sessionStorage.setItem(
           "boardmeet-joined-code",
-          savedInviteCode,
+          meetup.invite_code,
+        );
+
+        sessionStorage.setItem(
+          "boardmeet-joined-meetup",
+          JSON.stringify(meetup),
         );
 
         sessionStorage.removeItem(
@@ -107,15 +142,20 @@ export default function JoinMeetupPage() {
         );
 
         router.push("/meetup/demo");
-      } catch {
-        setIsJoining(false);
+      } catch (error) {
+        console.error(
+          "Unexpected join meetup error:",
+          error,
+        );
 
         setErrorMessage(
-          "The saved meetup information could not be read.",
+          "Something went wrong while joining the meetup.",
         );
+      } finally {
+        setIsJoining(false);
       }
     },
-    [inviteCode, router],
+    [inviteCode, isJoining, router],
   );
 
   useEffect(() => {
@@ -135,7 +175,7 @@ export default function JoinMeetupPage() {
     hasAutoJoined.current = true;
 
     setInviteCode(codeFromUrl);
-    handleJoinMeetup(codeFromUrl);
+    void handleJoinMeetup(codeFromUrl);
   }, [searchParams, handleJoinMeetup]);
 
   return (
@@ -165,7 +205,8 @@ export default function JoinMeetupPage() {
               <span
                 className="material-symbols-rounded text-[50px]"
                 style={{
-                  fontVariationSettings: "'FILL' 1",
+                  fontVariationSettings:
+                    "'FILL' 1",
                 }}
               >
                 group_add
@@ -214,7 +255,7 @@ export default function JoinMeetupPage() {
                     event.key === "Enter" &&
                     !isJoining
                   ) {
-                    handleJoinMeetup();
+                    void handleJoinMeetup();
                   }
                 }}
                 placeholder="BM-ABC123"
@@ -242,7 +283,7 @@ export default function JoinMeetupPage() {
             <button
               type="button"
               onClick={() =>
-                handleJoinMeetup()
+                void handleJoinMeetup()
               }
               disabled={isJoining}
               className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-violet-600 px-5 py-4 text-base font-bold text-white shadow-lg shadow-violet-200 transition hover:bg-violet-700 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60"
@@ -269,19 +310,18 @@ export default function JoinMeetupPage() {
 
           <section className="mt-5 flex items-start gap-3 rounded-2xl border border-violet-100 bg-violet-50 p-4">
             <span className="material-symbols-rounded mt-0.5 text-[21px] text-violet-600">
-              info
+              cloud_done
             </span>
 
             <div>
               <p className="text-sm font-bold text-violet-900">
-                Local development version
+                Online meetup access
               </p>
 
               <p className="mt-1 text-xs leading-5 text-violet-700">
-                For now, this code only works for
-                a meetup created in the same browser.
-                A database will allow guests on other
-                devices to join later.
+                Invite codes are now checked using
+                the BoardMeet database, so guests can
+                join from other devices.
               </p>
             </div>
           </section>
@@ -305,5 +345,28 @@ export default function JoinMeetupPage() {
         </main>
       </div>
     </MobileShell>
+  );
+}
+
+function JoinPageFallback() {
+  return (
+    <MobileShell>
+      <div className="flex min-h-screen items-center justify-center bg-[#FAF9FF]">
+        <div className="flex items-center gap-2 text-sm font-bold text-violet-700">
+          <span className="material-symbols-rounded animate-spin">
+            progress_activity
+          </span>
+          Loading...
+        </div>
+      </div>
+    </MobileShell>
+  );
+}
+
+export default function JoinMeetupPage() {
+  return (
+    <Suspense fallback={<JoinPageFallback />}>
+      <JoinMeetupContent />
+    </Suspense>
   );
 }
