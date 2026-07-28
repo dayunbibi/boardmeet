@@ -83,8 +83,10 @@ export default function ResultsPage() {
   >([]);
 
   const [isLoaded, setIsLoaded] = useState(false);
+
   const [isRefreshing, setIsRefreshing] =
     useState(false);
+
   const [isDeleting, setIsDeleting] =
     useState(false);
 
@@ -99,46 +101,56 @@ export default function ResultsPage() {
 
       setErrorMessage("");
 
-      const savedDraft = sessionStorage.getItem(
-        "boardmeet-create-draft",
-      );
-
-      if (!savedDraft) {
-        setErrorMessage(
-          "The meetup information could not be found. Create a meetup first.",
-        );
-        setIsLoaded(true);
-        setIsRefreshing(false);
-        return;
-      }
-
-      let parsedDraft: MeetupDraft;
-
-      try {
-        parsedDraft = JSON.parse(
-          savedDraft,
-        ) as MeetupDraft;
-      } catch (error) {
-        console.error(
-          "Could not read boardmeet-create-draft.",
-          error,
-        );
-
-        setErrorMessage(
-          "The saved meetup information is invalid.",
-        );
-        setIsLoaded(true);
-        setIsRefreshing(false);
-        return;
-      }
-
-      const inviteCode =
-        parsedDraft.inviteCode?.trim();
+      let inviteCode = sessionStorage
+        .getItem("boardmeet-results-code")
+        ?.trim()
+        .toUpperCase();
 
       if (!inviteCode) {
-        setErrorMessage(
-          "No invite code was found for this meetup.",
+        const savedDraft = sessionStorage.getItem(
+          "boardmeet-create-draft",
         );
+
+        if (savedDraft) {
+          try {
+            const parsedDraft = JSON.parse(
+              savedDraft,
+            ) as MeetupDraft;
+
+            inviteCode =
+              parsedDraft.inviteCode
+                ?.trim()
+                .toUpperCase() ?? "";
+          } catch (error) {
+            console.error(
+              "Could not read boardmeet-create-draft.",
+              error,
+            );
+          }
+        }
+      }
+
+      if (!inviteCode) {
+        setMeetup(null);
+        setResponses([]);
+
+        setErrorMessage(
+          "No invite code was found. Enter a meetup code to view its results.",
+        );
+
+        setIsLoaded(true);
+        setIsRefreshing(false);
+        return;
+      }
+
+      if (!/^BM-[A-Z0-9]{6}$/.test(inviteCode)) {
+        setMeetup(null);
+        setResponses([]);
+
+        setErrorMessage(
+          "The saved invite code is not valid.",
+        );
+
         setIsLoaded(true);
         setIsRefreshing(false);
         return;
@@ -171,24 +183,37 @@ export default function ResultsPage() {
           meetupError,
         );
 
+        setMeetup(null);
+        setResponses([]);
+
         setErrorMessage(
           "The meetup could not be loaded from Supabase.",
         );
+
         setIsLoaded(true);
         setIsRefreshing(false);
         return;
       }
 
       if (!meetupData) {
+        setMeetup(null);
+        setResponses([]);
+
         setErrorMessage(
           "No meetup was found for this invite code.",
         );
+
         setIsLoaded(true);
         setIsRefreshing(false);
         return;
       }
 
-      setMeetup({
+      sessionStorage.setItem(
+        "boardmeet-results-code",
+        meetupData.invite_code,
+      );
+
+      const normalizedMeetup: MeetupRow = {
         ...meetupData,
         candidate_dates: Array.isArray(
           meetupData.candidate_dates,
@@ -200,7 +225,9 @@ export default function ResultsPage() {
         )
           ? meetupData.time_slots
           : [],
-      });
+      };
+
+      setMeetup(normalizedMeetup);
 
       const {
         data: responseData,
@@ -231,9 +258,11 @@ export default function ResultsPage() {
         );
 
         setResponses([]);
+
         setErrorMessage(
           "Participant responses could not be loaded.",
         );
+
         setIsLoaded(true);
         setIsRefreshing(false);
         return;
@@ -444,6 +473,14 @@ export default function ResultsPage() {
     setIsDeleting(false);
   }
 
+  function handleSearchAnotherMeetup() {
+    sessionStorage.removeItem(
+      "boardmeet-results-code",
+    );
+
+    router.push("/results");
+  }
+
   if (!isLoaded) {
     return (
       <MobileShell>
@@ -462,6 +499,65 @@ export default function ResultsPage() {
     );
   }
 
+  if (!meetup) {
+    return (
+      <MobileShell>
+        <div className="min-h-screen bg-[#FAF9FF]">
+          <header className="flex items-center justify-between px-5 py-5">
+            <button
+              type="button"
+              onClick={() => router.push("/")}
+              className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-gray-700 shadow-sm"
+              aria-label="Go home"
+            >
+              <span className="material-symbols-rounded">
+                arrow_back
+              </span>
+            </button>
+
+            <span className="text-sm font-bold text-gray-900">
+              BoardMeet
+            </span>
+
+            <div className="h-10 w-10" />
+          </header>
+
+          <main className="px-6 pb-12 pt-16 text-center">
+            <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-red-100 text-red-600">
+              <span className="material-symbols-rounded text-[40px]">
+                search_off
+              </span>
+            </div>
+
+            <h1 className="mt-6 text-2xl font-bold text-gray-950">
+              Results not found
+            </h1>
+
+            <p className="mt-3 text-sm leading-6 text-gray-500">
+              {errorMessage}
+            </p>
+
+            <button
+              type="button"
+              onClick={handleSearchAnotherMeetup}
+              className="mt-7 w-full rounded-2xl bg-violet-600 px-5 py-4 text-sm font-bold text-white shadow-lg shadow-violet-200"
+            >
+              Enter an Invite Code
+            </button>
+
+            <button
+              type="button"
+              onClick={() => router.push("/")}
+              className="mt-3 w-full rounded-2xl border border-gray-200 bg-white px-5 py-4 text-sm font-bold text-gray-700"
+            >
+              Back to Home
+            </button>
+          </main>
+        </div>
+      </MobileShell>
+    );
+  }
+
   return (
     <MobileShell>
       <div className="min-h-screen bg-[#FAF9FF] pb-12">
@@ -469,11 +565,9 @@ export default function ResultsPage() {
           <div className="flex items-center justify-between px-5 py-4">
             <button
               type="button"
-              onClick={() =>
-                router.push("/create/share")
-              }
+              onClick={handleSearchAnotherMeetup}
               className="flex h-10 w-10 items-center justify-center rounded-full border border-gray-100 bg-white text-gray-700 shadow-sm"
-              aria-label="Go back"
+              aria-label="Search another meetup"
             >
               <span className="material-symbols-rounded">
                 arrow_back
@@ -486,8 +580,7 @@ export default function ResultsPage() {
               </p>
 
               <p className="max-w-[190px] truncate text-sm font-bold text-gray-900">
-                {meetup?.meetup_name ??
-                  "Board Game Meetup"}
+                {meetup.meetup_name}
               </p>
             </div>
 
@@ -545,11 +638,10 @@ export default function ResultsPage() {
               </p>
 
               <h1 className="mt-3 text-[29px] font-bold leading-tight tracking-tight">
-                {meetup?.meetup_name ??
-                  "Board Game Meetup"}
+                {meetup.meetup_name}
               </h1>
 
-              {meetup?.location && (
+              {meetup.location && (
                 <div className="mt-4 flex items-center gap-2 text-sm text-violet-100">
                   <span className="material-symbols-rounded text-[19px]">
                     location_on
@@ -559,17 +651,15 @@ export default function ResultsPage() {
                 </div>
               )}
 
-              {meetup?.invite_code && (
-                <div className="mt-3 flex items-center gap-2 text-sm text-violet-100">
-                  <span className="material-symbols-rounded text-[19px]">
-                    password
-                  </span>
+              <div className="mt-3 flex items-center gap-2 text-sm text-violet-100">
+                <span className="material-symbols-rounded text-[19px]">
+                  password
+                </span>
 
-                  <span className="font-mono font-bold tracking-wider">
-                    {meetup.invite_code}
-                  </span>
-                </div>
-              )}
+                <span className="font-mono font-bold tracking-wider">
+                  {meetup.invite_code}
+                </span>
+              </div>
 
               <div className="mt-6 grid grid-cols-2 gap-3">
                 <div className="rounded-2xl bg-white/10 p-4 backdrop-blur">
@@ -616,20 +706,10 @@ export default function ResultsPage() {
               <button
                 type="button"
                 onClick={() =>
-                  router.push("/create/share")
-                }
-                className="mt-5 w-full rounded-2xl bg-violet-600 px-5 py-4 text-sm font-bold text-white transition hover:bg-violet-700 active:scale-[0.99]"
-              >
-                View Invite
-              </button>
-
-              <button
-                type="button"
-                onClick={() =>
                   void loadResults(true)
                 }
                 disabled={isRefreshing}
-                className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl border border-gray-200 bg-white px-5 py-4 text-sm font-bold text-gray-700 disabled:opacity-60"
+                className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-violet-600 px-5 py-4 text-sm font-bold text-white disabled:opacity-60"
               >
                 <span
                   className={`material-symbols-rounded text-[20px] ${
@@ -642,6 +722,14 @@ export default function ResultsPage() {
                 </span>
 
                 Refresh Responses
+              </button>
+
+              <button
+                type="button"
+                onClick={handleSearchAnotherMeetup}
+                className="mt-3 w-full rounded-2xl border border-gray-200 bg-white px-5 py-4 text-sm font-bold text-gray-700"
+              >
+                Search Another Meetup
               </button>
             </section>
           ) : (
@@ -783,9 +871,7 @@ export default function ResultsPage() {
 
                                   <span className="shrink-0 rounded-full bg-violet-100 px-3 py-1.5 text-xs font-bold text-violet-700">
                                     {result.count}/
-                                    {
-                                      responses.length
-                                    }
+                                    {responses.length}
                                   </span>
                                 </div>
 
@@ -891,12 +977,13 @@ export default function ResultsPage() {
                             Array.isArray(slots) &&
                             slots.length > 0,
                         )
-                        .sort(([firstDate], [
-                          secondDate,
-                        ]) =>
-                          firstDate.localeCompare(
-                            secondDate,
-                          ),
+                        .sort(
+                          ([
+                            firstDate,
+                          ], [secondDate]) =>
+                            firstDate.localeCompare(
+                              secondDate,
+                            ),
                         );
 
                     return (
@@ -1026,6 +1113,18 @@ export default function ResultsPage() {
                 {isRefreshing
                   ? "Refreshing..."
                   : "Refresh Responses"}
+              </button>
+
+              <button
+                type="button"
+                onClick={handleSearchAnotherMeetup}
+                className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl border border-gray-200 bg-white px-5 py-4 text-sm font-bold text-gray-700"
+              >
+                <span className="material-symbols-rounded text-[20px]">
+                  search
+                </span>
+
+                Search Another Meetup
               </button>
 
               <button
