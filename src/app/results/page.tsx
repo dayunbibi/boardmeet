@@ -87,7 +87,11 @@ export default function ResultsLookupPage() {
         data.invite_code,
       );
 
-      router.push("/meetup/demo/results");
+      router.push(
+        `/meetup/demo/results?code=${encodeURIComponent(
+          data.invite_code,
+        )}`,
+      );
     } catch (error) {
       console.error(
         "Unexpected results lookup error:",

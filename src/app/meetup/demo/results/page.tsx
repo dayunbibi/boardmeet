@@ -93,6 +93,9 @@ export default function ResultsPage() {
   const [errorMessage, setErrorMessage] =
     useState("");
 
+  const [shareMessage, setShareMessage] =
+    useState("");
+
   const loadResults = useCallback(
     async (showRefreshing = false) => {
       if (showRefreshing) {
@@ -101,10 +104,21 @@ export default function ResultsPage() {
 
       setErrorMessage("");
 
-      let inviteCode = sessionStorage
-        .getItem("boardmeet-results-code")
+      const codeFromUrl = new URLSearchParams(
+        window.location.search,
+      )
+        .get("code")
         ?.trim()
         .toUpperCase();
+
+      let inviteCode = codeFromUrl;
+
+      if (!inviteCode) {
+        inviteCode = sessionStorage
+          .getItem("boardmeet-results-code")
+          ?.trim()
+          .toUpperCase();
+      }
 
       if (!inviteCode) {
         const savedDraft = sessionStorage.getItem(
@@ -473,6 +487,50 @@ export default function ResultsPage() {
     setIsDeleting(false);
   }
 
+  async function handleShareResults() {
+    if (!meetup) {
+      return;
+    }
+
+    const shareUrl = `${window.location.origin}/meetup/demo/results?code=${encodeURIComponent(
+      meetup.invite_code,
+    )}`;
+
+    setShareMessage("");
+
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: `${meetup.meetup_name} Results`,
+          text: "View the BoardMeet meetup results.",
+          url: shareUrl,
+        });
+
+        setShareMessage("Results shared.");
+        return;
+      }
+
+      await navigator.clipboard.writeText(shareUrl);
+      setShareMessage("Results link copied.");
+    } catch (error) {
+      if (
+        error instanceof DOMException &&
+        error.name === "AbortError"
+      ) {
+        return;
+      }
+
+      console.error(
+        "Could not share results:",
+        error,
+      );
+
+      setShareMessage(
+        "The results link could not be shared.",
+      );
+    }
+  }
+
   function handleSearchAnotherMeetup() {
     sessionStorage.removeItem(
       "boardmeet-results-code",
@@ -684,6 +742,29 @@ export default function ResultsPage() {
               </div>
             </div>
           </section>
+
+          <button
+            type="button"
+            onClick={() =>
+              void handleShareResults()
+            }
+            className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl border border-violet-200 bg-white px-5 py-4 text-sm font-bold text-violet-700 shadow-sm transition hover:bg-violet-50 active:scale-[0.99]"
+          >
+            <span className="material-symbols-rounded text-[20px]">
+              share
+            </span>
+
+            Share Results
+          </button>
+
+          {shareMessage && (
+            <p
+              className="mt-2 text-center text-xs font-semibold text-violet-600"
+              role="status"
+            >
+              {shareMessage}
+            </p>
+          )}
 
           {responses.length === 0 ? (
             <section className="mt-6 rounded-[26px] border border-gray-200 bg-white p-6 text-center shadow-sm">
