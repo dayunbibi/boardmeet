@@ -138,8 +138,7 @@ export default function HomePage() {
 
           {/* 결과 보기 */}
 <Link
-  href="/meetup/demo/results"
-  className="mt-5 flex items-center gap-1.5 text-[13px] font-semibold text-[#5D5D67] underline underline-offset-4 transition hover:text-[#6D16E8] active:scale-[0.98]"
+href="/results"  className="mt-5 flex items-center gap-1.5 text-[13px] font-semibold text-[#5D5D67] underline underline-offset-4 transition hover:text-[#6D16E8] active:scale-[0.98]"
 >
   <span className="material-symbols-rounded text-[18px] text-[#7A6E54]">
     monitoring
