@@ -1,0 +1,62 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum PollType {
+  TIME
+  GAME
+}
+
+model Poll {
+  id          String   @id @default(cuid())
+  type        PollType
+  title       String
+  description String?
+  deadline    DateTime?
+  isClosed    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  options PollOption[]
+
+  @@index([type])
+}
+
+model PollOption {
+  id     String @id @default(cuid())
+  pollId String
+  label  String
+  order  Int    @default(0)
+
+  poll  Poll   @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  votes Vote[]
+
+  @@index([pollId])
+}
+
+model Vote {
+  id           String   @id @default(cuid())
+  pollOptionId String
+  voterName    String
+  deviceToken  String
+  createdAt    DateTime @default(now())
+
+  pollOption PollOption @relation(fields: [pollOptionId], references: [id], onDelete: Cascade)
+
+  @@index([pollOptionId])
+  @@index([deviceToken])
+}
+
+model Notice {
+  id        String   @id @default(cuid())
+  title     String
+  body      String
+  isPinned  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([isPinned])
+}
