@@ -9,6 +9,7 @@ import { ShareButton } from "@/components/ui/ShareButton";
 import { Badge } from "@/components/ui/Badge";
 import { PrimaryButton, GhostButton } from "@/components/ui/Buttons";
 import { VoteOptionCard } from "@/components/ui/VoteOptionCard";
+import { AttendanceToggle } from "@/components/ui/AttendanceToggle";
 import { RankRow } from "@/components/ui/RankRow";
 import { HighlightCard } from "@/components/ui/HighlightCard";
 import { SectionTitle } from "@/components/ui/SectionTitle";
@@ -125,18 +126,28 @@ export default async function PollPage({
             </div>
             <div className="flex flex-col gap-2">
               <span className="text-[13px] font-medium text-text-secondary">
-                {isTimePoll ? "가능한 시간을 모두 선택하세요" : "게임을 하나 선택하세요"}
+                {isTimePoll ? "참석 여부를 선택하세요" : "게임을 하나 선택하세요"}
               </span>
-              {poll.options.map((option) => (
-                <VoteOptionCard
-                  key={option.id}
-                  type={inputType}
-                  name="optionIds"
-                  value={option.id}
-                  label={option.label}
-                  defaultChecked={myOptionIds.has(option.id)}
-                />
-              ))}
+              {poll.options.map((option) =>
+                isTimePoll ? (
+                  <AttendanceToggle
+                    key={option.id}
+                    name="optionIds"
+                    value={option.id}
+                    label={option.label}
+                    defaultChecked={myOptionIds.has(option.id)}
+                  />
+                ) : (
+                  <VoteOptionCard
+                    key={option.id}
+                    type={inputType}
+                    name="optionIds"
+                    value={option.id}
+                    label={option.label}
+                    defaultChecked={myOptionIds.has(option.id)}
+                  />
+                )
+              )}
             </div>
             <div className="flex items-center gap-2">
               <PrimaryButton type="submit" className="flex-1">

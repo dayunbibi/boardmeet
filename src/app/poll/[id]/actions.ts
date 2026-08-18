@@ -23,7 +23,9 @@ export async function submitVoteAction(pollId: string, formData: FormData): Prom
     .getAll("optionIds")
     .map(String)
     .filter((id) => validIds.has(id));
-  if (chosen.length === 0) redirect(`/poll/${pollId}?error=항목을 1개 이상 선택해주세요.`);
+  if (chosen.length === 0 && poll.type !== "TIME") {
+    redirect(`/poll/${pollId}?error=항목을 1개 이상 선택해주세요.`);
+  }
 
   const deviceId = await getOrCreateDeviceId();
 

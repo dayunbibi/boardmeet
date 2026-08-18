@@ -5,7 +5,7 @@ import { CalendarDays, Dices, Plus, X, ChevronLeft } from "lucide-react";
 import { PrimaryButton, SecondaryButton } from "@/components/ui/Buttons";
 import { createPollAction } from "../../actions";
 
-const STEP_COUNT = 4;
+const FIXED_TIME_SLOTS = ["금요일 저녁 7시", "토요일 저녁 7시", "일요일 저녁 7시"];
 
 export function PollWizard({ initialError }: { initialError?: string }) {
   const [step, setStep] = useState(1);
@@ -13,12 +13,19 @@ export function PollWizard({ initialError }: { initialError?: string }) {
   const [title, setTitle] = useState("");
   const [items, setItems] = useState<string[]>(["", ""]);
 
+  const isTimeType = type === "TIME";
+  const totalSteps = isTimeType ? 3 : 4;
+  const itemsStep = 3;
+  const deadlineStep = isTimeType ? 3 : 4;
+
   const cleanItems = items.map((i) => i.trim()).filter(Boolean);
+  const optionsValue = isTimeType ? FIXED_TIME_SLOTS.join("\n") : cleanItems.join("\n");
+
   const canNext =
     (step === 1 && !!type) ||
     (step === 2 && title.trim().length > 0) ||
-    (step === 3 && cleanItems.length >= 2) ||
-    step === 4;
+    (!isTimeType && step === itemsStep && cleanItems.length >= 2) ||
+    step === deadlineStep;
 
   function updateItem(index: number, value: string) {
     setItems((prev) => prev.map((v, i) => (i === index ? value : v)));
@@ -35,7 +42,7 @@ export function PollWizard({ initialError }: { initialError?: string }) {
   return (
     <form action={createPollAction} className="flex flex-col gap-6">
       <input type="hidden" name="type" value={type} />
-      <input type="hidden" name="options" value={cleanItems.join("\n")} />
+      <input type="hidden" name="options" value={optionsValue} />
 
       <div className="flex items-center gap-3">
         {step > 1 && (
@@ -51,11 +58,11 @@ export function PollWizard({ initialError }: { initialError?: string }) {
         <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-black/[0.06]">
           <div
             className="h-full rounded-full bg-primary transition-all"
-            style={{ width: `${(step / STEP_COUNT) * 100}%` }}
+            style={{ width: `${(step / totalSteps) * 100}%` }}
           />
         </div>
         <span className="shrink-0 text-[13px] font-medium text-text-secondary">
-          {step} / {STEP_COUNT}
+          {step} / {totalSteps}
         </span>
       </div>
 
@@ -84,7 +91,7 @@ export function PollWizard({ initialError }: { initialError?: string }) {
               모임 시간 투표
             </span>
             <span className="block text-[13px] text-text-secondary">
-              후보 시간 중 가능한 시간을 골라요
+              금·토·일 저녁 7시 중 참석 여부를 물어요
             </span>
           </span>
         </button>
@@ -140,43 +147,50 @@ export function PollWizard({ initialError }: { initialError?: string }) {
             className="rounded-xl border border-border bg-surface px-4 py-3.5 text-[15px] text-text-primary outline-none focus:border-primary"
           />
         </div>
+        {isTimeType && (
+          <div className="rounded-xl bg-soft-purple px-4 py-3 text-[13px] text-primary">
+            금요일 · 토요일 · 일요일 저녁 7시, 3가지로 자동 생성돼요
+          </div>
+        )}
       </div>
 
-      <div className={step === 3 ? "flex flex-col gap-4" : "hidden"}>
-        <h2 className="text-[19px] font-bold tracking-tight text-text-primary">
-          후보 항목을 추가하세요
-        </h2>
-        <p className="text-[13px] text-text-secondary">최소 2개 이상 입력해주세요</p>
-        <div className="flex flex-col gap-2">
-          {items.map((item, i) => (
-            <div key={i} className="flex items-center gap-2">
-              <input
-                type="text"
-                value={item}
-                onChange={(e) => updateItem(i, e.target.value)}
-                placeholder={type === "TIME" ? "8/22(토) 14시" : "카탄"}
-                className="flex-1 rounded-xl border border-border bg-surface px-4 py-3 text-[15px] text-text-primary outline-none focus:border-primary"
-              />
-              {items.length > 2 && (
-                <button
-                  type="button"
-                  onClick={() => removeItem(i)}
-                  aria-label="삭제"
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-text-secondary transition active:scale-90 active:bg-black/[0.05]"
-                >
-                  <X size={16} />
-                </button>
-              )}
-            </div>
-          ))}
+      {!isTimeType && (
+        <div className={step === itemsStep ? "flex flex-col gap-4" : "hidden"}>
+          <h2 className="text-[19px] font-bold tracking-tight text-text-primary">
+            후보 항목을 추가하세요
+          </h2>
+          <p className="text-[13px] text-text-secondary">최소 2개 이상 입력해주세요</p>
+          <div className="flex flex-col gap-2">
+            {items.map((item, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={item}
+                  onChange={(e) => updateItem(i, e.target.value)}
+                  placeholder="카탄"
+                  className="flex-1 rounded-xl border border-border bg-surface px-4 py-3 text-[15px] text-text-primary outline-none focus:border-primary"
+                />
+                {items.length > 2 && (
+                  <button
+                    type="button"
+                    onClick={() => removeItem(i)}
+                    aria-label="삭제"
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-text-secondary transition active:scale-90 active:bg-black/[0.05]"
+                  >
+                    <X size={16} />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+          <SecondaryButton type="button" onClick={addItem} className="justify-center">
+            <Plus size={16} />
+            항목 추가
+          </SecondaryButton>
         </div>
-        <SecondaryButton type="button" onClick={addItem} className="justify-center">
-          <Plus size={16} />
-          항목 추가
-        </SecondaryButton>
-      </div>
+      )}
 
-      <div className={step === 4 ? "flex flex-col gap-4" : "hidden"}>
+      <div className={step === deadlineStep ? "flex flex-col gap-4" : "hidden"}>
         <h2 className="text-[19px] font-bold tracking-tight text-text-primary">
           마감 시각을 정하세요
         </h2>
@@ -188,7 +202,7 @@ export function PollWizard({ initialError }: { initialError?: string }) {
         />
       </div>
 
-      {step < STEP_COUNT ? (
+      {step < totalSteps ? (
         <PrimaryButton type="button" disabled={!canNext} onClick={() => setStep((s) => s + 1)}>
           다음
         </PrimaryButton>
