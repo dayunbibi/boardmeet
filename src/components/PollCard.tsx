@@ -2,6 +2,7 @@ import Link from "next/link";
 import { CalendarDays, Dices, ChevronRight } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { formatDateTime } from "@/lib/format";
+import type { Locale } from "@/lib/i18n";
 
 export function PollCard({
   id,
@@ -10,6 +11,7 @@ export function PollCard({
   totalVotes,
   deadline,
   closed,
+  locale = "ko",
 }: {
   id: string;
   type: "TIME" | "GAME";
@@ -17,6 +19,7 @@ export function PollCard({
   totalVotes: number;
   deadline: Date | null;
   closed: boolean;
+  locale?: Locale;
 }) {
   const Icon = type === "TIME" ? CalendarDays : Dices;
 
@@ -30,11 +33,11 @@ export function PollCard({
       </div>
       <div className="min-w-0 flex-1">
         <div className="mb-1 flex items-center gap-1.5">
-          <Badge tone={closed ? "neutral" : "success"}>{closed ? "마감" : "진행중"}</Badge>
+          <Badge tone={closed ? "neutral" : "success"}>{closed ? (locale === "ko" ? "마감" : "Closed") : (locale === "ko" ? "진행중" : "Open")}</Badge>
         </div>
         <p className="truncate text-[15px] font-semibold text-text-primary">{title}</p>
         <p className="truncate text-[13px] text-text-secondary">
-          참여 {totalVotes}표{deadline && ` · 마감 ${formatDateTime(deadline)}`}
+          {locale === "ko" ? `참여 ${totalVotes}표` : `${totalVotes} votes`}{deadline && ` · ${locale === "ko" ? "마감" : "Closes"} ${formatDateTime(deadline, locale)}`}
         </p>
       </div>
       <ChevronRight size={18} className="shrink-0 text-text-secondary/60" />

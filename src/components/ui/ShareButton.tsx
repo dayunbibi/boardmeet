@@ -2,9 +2,11 @@
 
 import { useState } from "react";
 import { Check, Share2 } from "lucide-react";
+import type { Locale } from "@/lib/i18n";
 
-export function ShareButton({ path, label = "공유" }: { path: string; label?: string }) {
+export function ShareButton({ path, label, locale = "ko" }: { path: string; label?: string; locale?: Locale }) {
   const [copied, setCopied] = useState(false);
+  const shareLabel = label ?? (locale === "ko" ? "공유" : "Share");
 
   async function handleCopy() {
     const url = `${window.location.origin}${path}`;
@@ -13,7 +15,7 @@ export function ShareButton({ path, label = "공유" }: { path: string; label?: 
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch {
-      window.prompt("아래 링크를 복사하세요", url);
+      window.prompt(locale === "ko" ? "아래 링크를 복사하세요" : "Copy the link below", url);
     }
   }
 
@@ -26,12 +28,12 @@ export function ShareButton({ path, label = "공유" }: { path: string; label?: 
       {copied ? (
         <>
           <Check size={15} className="text-success-text" />
-          복사됨
+          {locale === "ko" ? "복사됨" : "Copied"}
         </>
       ) : (
         <>
           <Share2 size={15} />
-          {label}
+          {shareLabel}
         </>
       )}
     </button>

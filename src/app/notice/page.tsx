@@ -5,9 +5,12 @@ import { formatDateTime } from "@/lib/format";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ShareButton } from "@/components/ui/ShareButton";
+import { getLocale, getMessages } from "@/lib/i18n";
 
 export default async function NoticePage() {
   await connection();
+  const locale = await getLocale();
+  const t = getMessages(locale);
 
   const notices = await prisma.notice.findMany({
     orderBy: [{ isPinned: "desc" }, { createdAt: "desc" }],
@@ -16,14 +19,14 @@ export default async function NoticePage() {
   return (
     <div className="animate-fade-in">
       <PageHeader
-        title="공지사항"
+        title={t.notices}
         backHref="/"
-        action={<ShareButton path="/notice" label="공유" />}
+        action={<ShareButton path="/notice" locale={locale} />}
       />
 
       <div className="px-5">
         {notices.length === 0 ? (
-          <EmptyState icon={Megaphone} title="등록된 공지가 없어요" />
+          <EmptyState icon={Megaphone} title={t.noNotices} />
         ) : (
           <ul className="flex flex-col gap-3">
             {notices.map((notice) => (
@@ -41,7 +44,7 @@ export default async function NoticePage() {
                   {notice.body}
                 </p>
                 <p className="mt-2.5 text-[12px] text-text-secondary/70">
-                  {formatDateTime(notice.createdAt)}
+                  {formatDateTime(notice.createdAt, locale)}
                 </p>
               </li>
             ))}

@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Geist } from "next/font/google";
 import { AppShell } from "@/components/ui/AppShell";
+import { LanguageSwitcher } from "@/components/LanguageSwitcher";
+import { getLocale } from "@/lib/i18n";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -13,12 +15,15 @@ export const metadata: Metadata = {
   description: "모임 시간 투표, 보드게임 투표, 공지를 한 곳에서",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  const locale = await getLocale();
+
   return (
-    <html lang="ko" className={`${geistSans.variable} h-full antialiased`}>
+    <html lang={locale} className={`${geistSans.variable} h-full antialiased`}>
       <body className="min-h-full">
         <AppShell>
-          <main className="flex-1 pb-10">{children}</main>
+          <main className="flex-1 pb-24">{children}</main>
+          <LanguageSwitcher locale={locale} />
         </AppShell>
       </body>
     </html>

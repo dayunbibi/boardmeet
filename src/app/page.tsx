@@ -8,9 +8,12 @@ import { PollCard } from "@/components/PollCard";
 import { SectionTitle } from "@/components/ui/SectionTitle";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { GhostButton } from "@/components/ui/Buttons";
+import { getLocale, getMessages } from "@/lib/i18n";
 
 export default async function HomePage() {
   await connection();
+  const locale = await getLocale();
+  const t = getMessages(locale);
 
   const [polls, notices] = await Promise.all([
     prisma.poll.findMany({
@@ -35,23 +38,23 @@ export default async function HomePage() {
           <CalendarHeart size={24} strokeWidth={1.75} />
         </div>
         <h1 className="mt-3 text-[22px] font-bold leading-tight tracking-tight text-text-primary">
-          이번 모임, 다 같이
-          <br />
-          정해봐요
+          {t.heroTitle.split("\n").map((line, index) => (
+            <span key={line}>{index > 0 && <br />}{line}</span>
+          ))}
         </h1>
         <p className="mt-1.5 text-[15px] text-text-secondary">
-          시간과 게임을 투표로 정하고, 공지도 한곳에서 확인하세요.
+          {t.heroDescription}
         </p>
       </div>
 
       <div className="mt-6 flex flex-col gap-8 px-5">
         <section>
-          <SectionTitle>진행 중인 투표</SectionTitle>
+          <SectionTitle>{t.activePolls}</SectionTitle>
           {activePolls.length === 0 ? (
             <EmptyState
               icon={CalendarHeart}
-              title="진행 중인 투표가 없어요"
-              description="관리자가 새 투표를 만들면 여기에 표시됩니다."
+              title={t.noActivePolls}
+              description={t.noActivePollsDescription}
             />
           ) : (
             <ul className="flex flex-col gap-2.5">
@@ -66,6 +69,7 @@ export default async function HomePage() {
                       totalVotes={totalVotes}
                       deadline={poll.deadline}
                       closed={false}
+                      locale={locale}
                     />
                   </li>
                 );
@@ -78,15 +82,15 @@ export default async function HomePage() {
           <SectionTitle
             action={
               <GhostButton href="/notice">
-                더보기
+                {t.more}
                 <ChevronRight size={14} />
               </GhostButton>
             }
           >
-            최근 공지
+            {t.recentNotices}
           </SectionTitle>
           {notices.length === 0 ? (
-            <EmptyState icon={Megaphone} title="등록된 공지가 없어요" />
+            <EmptyState icon={Megaphone} title={t.noNotices} />
           ) : (
             <ul className="flex flex-col gap-2">
               {notices.map((notice) => (
@@ -106,7 +110,7 @@ export default async function HomePage() {
 
         {closedPolls.length > 0 && (
           <section>
-            <SectionTitle>마감된 투표</SectionTitle>
+            <SectionTitle>{t.closedPolls}</SectionTitle>
             <ul className="flex flex-col gap-2.5">
               {closedPolls.map((poll) => {
                 const totalVotes = poll.options.reduce((sum, o) => sum + o.votes.length, 0);
@@ -119,6 +123,7 @@ export default async function HomePage() {
                       totalVotes={totalVotes}
                       deadline={poll.deadline}
                       closed
+                      locale={locale}
                     />
                   </li>
                 );

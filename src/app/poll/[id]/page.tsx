@@ -15,6 +15,7 @@ import { HighlightCard } from "@/components/ui/HighlightCard";
 import { SectionTitle } from "@/components/ui/SectionTitle";
 import { ParticipantList } from "@/components/ParticipantList";
 import { submitVoteAction, cancelVoteAction } from "./actions";
+import { getLocale, getMessages } from "@/lib/i18n";
 
 export default async function PollPage({
   params,
@@ -25,6 +26,8 @@ export default async function PollPage({
 }) {
   const { id } = await params;
   const { error } = await searchParams;
+  const locale = await getLocale();
+  const t = getMessages(locale);
 
   const poll = await prisma.poll.findUnique({
     where: { id },
@@ -63,14 +66,14 @@ export default async function PollPage({
       <PageHeader
         title={poll.title}
         backHref="/"
-        action={<ShareButton path={`/poll/${poll.id}`} />}
+        action={<ShareButton path={`/poll/${poll.id}`} locale={locale} />}
       />
 
       <div className="flex flex-col gap-6 px-5">
         <div>
           <div className="flex flex-wrap items-center gap-1.5">
-            <Badge tone="purple">{isTimePoll ? "모임 시간 투표" : "보드게임 투표"}</Badge>
-            <Badge tone={closed ? "neutral" : "success"}>{closed ? "마감" : "진행중"}</Badge>
+            <Badge tone="purple">{isTimePoll ? t.timePoll : t.gamePoll}</Badge>
+            <Badge tone={closed ? "neutral" : "success"}>{closed ? t.closed : t.open}</Badge>
           </div>
           {poll.description && (
             <p className="mt-2.5 whitespace-pre-wrap text-[14px] leading-relaxed text-text-secondary">
@@ -78,10 +81,10 @@ export default async function PollPage({
             </p>
           )}
           <div className="mt-2 flex items-center gap-3 text-[13px] text-text-secondary">
-            {poll.deadline && <span>마감 {formatDateTime(poll.deadline)}</span>}
+            {poll.deadline && <span>{t.deadline} {formatDateTime(poll.deadline, locale)}</span>}
             <span className="flex items-center gap-1">
               <Users size={13} />
-              {totalParticipants}명 참여
+              {totalParticipants}{t.participants}
             </span>
           </div>
         </div>
@@ -95,9 +98,9 @@ export default async function PollPage({
         {closed && winner && (
           <HighlightCard
             icon={isTimePoll ? Trophy : Gamepad2}
-            eyebrow={isTimePoll ? "베스트 시간" : "인기 게임 1위"}
+            eyebrow={isTimePoll ? t.bestTime : t.topGame}
             label={winner.label}
-            meta={`${winner.count}명이 선택했어요`}
+            meta={`${winner.count}${t.selectedBy}`}
           />
         )}
 
@@ -107,11 +110,11 @@ export default async function PollPage({
             className="flex flex-col gap-4 rounded-2xl border border-border bg-surface p-4"
           >
             <p className="text-[15px] font-bold text-text-primary">
-              {hasVoted ? "내 투표 수정하기" : "투표하기"}
+              {hasVoted ? t.editVote : t.vote}
             </p>
             <div className="flex flex-col gap-1.5">
               <label htmlFor="voterName" className="text-[13px] font-medium text-text-secondary">
-                이름
+                {t.name}
               </label>
               <input
                 id="voterName"
@@ -120,13 +123,13 @@ export default async function PollPage({
                 required
                 maxLength={20}
                 defaultValue={myVoterName}
-                placeholder="이름을 입력하세요"
+                placeholder={t.namePlaceholder}
                 className="rounded-xl border border-border bg-bg px-4 py-3 text-[15px] text-text-primary outline-none focus:border-primary"
               />
             </div>
             <div className="flex flex-col gap-2">
               <span className="text-[13px] font-medium text-text-secondary">
-                {isTimePoll ? "참석 여부를 선택하세요" : "게임을 하나 선택하세요"}
+                {isTimePoll ? t.chooseAttendance : t.chooseGame}
               </span>
               {poll.options.map((option) =>
                 isTimePoll ? (
@@ -136,6 +139,8 @@ export default async function PollPage({
                     value={option.id}
                     label={option.label}
                     defaultChecked={myOptionIds.has(option.id)}
+                    attendingLabel={t.attending}
+                    notAttendingLabel={t.notAttending}
                   />
                 ) : (
                   <VoteOptionCard
@@ -151,12 +156,12 @@ export default async function PollPage({
             </div>
             <div className="flex items-center gap-2">
               <PrimaryButton type="submit" className="flex-1">
-                {hasVoted ? "수정하기" : "제출하기"}
+                {hasVoted ? t.update : t.submit}
               </PrimaryButton>
               {hasVoted && (
                 <GhostButton formAction={cancelVoteAction.bind(null, poll.id)}>
                   <X size={14} />
-                  취소
+                  {t.cancel}
                 </GhostButton>
               )}
             </div>
@@ -164,7 +169,7 @@ export default async function PollPage({
         )}
 
         <section>
-          <SectionTitle>{isTimePoll ? "시간별 결과" : "게임 순위"}</SectionTitle>
+          <SectionTitle>{isTimePoll ? t.timeResults : t.gameRanking}</SectionTitle>
           <div className="flex flex-col gap-2.5">
             {results.map((r, i) => (
               <RankRow
@@ -182,8 +187,8 @@ export default async function PollPage({
         </section>
 
         <section>
-          <SectionTitle>참여자 ({participants.length})</SectionTitle>
-          <ParticipantList participants={participants} />
+          <SectionTitle>{t.participantList} ({participants.length})</SectionTitle>
+          <ParticipantList participants={participants} locale={locale} />
         </section>
       </div>
     </div>
