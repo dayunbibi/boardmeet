@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { connection } from "next/server";
 import { CalendarHeart, Megaphone, Pin, ChevronRight } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { isPollClosed } from "@/lib/polls";
@@ -9,6 +10,8 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { GhostButton } from "@/components/ui/Buttons";
 
 export default async function HomePage() {
+  await connection();
+
   const [polls, notices] = await Promise.all([
     prisma.poll.findMany({
       orderBy: { createdAt: "desc" },

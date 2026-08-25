@@ -5,15 +5,15 @@
 ## 기술 스택
 
 - Next.js 16 (App Router) + TypeScript + Tailwind CSS
-- Prisma + SQLite (로컬 개발)
+- Prisma + PostgreSQL (Neon/Vercel 배포)
 - 관리자 인증: PIN 기반 세션 쿠키 (회원 인증 없음)
 
 ## 로컬 개발
 
 ```bash
 npm install
-cp .env.example .env   # DATABASE_URL, ADMIN_PIN 값을 채워주세요
-npx prisma migrate dev
+cp .env.example .env   # PostgreSQL DATABASE_URL, ADMIN_PIN 값을 채워주세요
+npx prisma migrate deploy
 npm run dev
 ```
 
@@ -43,63 +43,38 @@ prisma/
 
 ## Vercel 배포 가이드
 
-### 1. Vercel CLI 설치 및 로그인
+### 1. GitHub와 Vercel 연결
 
-```bash
-npm i -g vercel
-vercel login
-vercel link
-```
+프로젝트를 GitHub 저장소에 push한 뒤 Vercel의 **Add New → Project**에서 해당
+저장소를 Import합니다. Framework Preset은 Next.js가 자동 감지됩니다.
 
 ### 2. 프로덕션 데이터베이스 준비
 
-SQLite 파일은 Vercel의 서버리스 환경에 영구 저장되지 않으므로, 배포 전 반드시 별도 DB로 전환해야 합니다. Neon Postgres(Vercel Marketplace 통합, 권장) 또는 Turso(libSQL, SQLite와 호환성이 높음) 중 선택하세요.
+Vercel 프로젝트에서 **Storage → Create Database → Neon**을 선택하고 데이터베이스를
+연결합니다. 연결이 끝나면 `DATABASE_URL` 환경변수가 생성되었는지 확인합니다.
 
-**Neon Postgres 사용 시 (권장)**
+### 3. 환경변수와 테이블 생성
+
+Vercel의 **Settings → Environment Variables**에 다음 값을 설정합니다.
+
+```text
+DATABASE_URL=<Neon pooled PostgreSQL 연결 문자열>
+ADMIN_PIN=<추측하기 어려운 관리자 PIN>
+```
+
+Neon SQL Editor에서 `prisma/migrations/20260815235918_init/migration.sql`을 실행하거나,
+로컬에서 프로덕션 연결 문자열을 일시적으로 전달해 마이그레이션을 적용합니다.
 
 ```bash
-vercel integration add neon
-vercel env pull --yes   # DATABASE_URL이 자동으로 채워집니다
+DATABASE_URL='Neon 연결 문자열' npx prisma migrate deploy
 ```
 
-`prisma/schema.prisma`의 datasource provider를 변경합니다.
-
-```prisma
-datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
-}
-```
-
-기존 SQLite용 마이그레이션 히스토리(`prisma/migrations`)를 삭제하고 Postgres 기준으로 새로 생성합니다.
-
-```bash
-rm -rf prisma/migrations
-npx prisma migrate dev --name init
-```
-
-**Turso 사용 시**
-
-```bash
-vercel integration add turso
-```
-
-Turso는 Prisma와 driver adapter(`@prisma/adapter-libsql`) 연결이 필요합니다. [Prisma Turso 가이드](https://www.prisma.io/docs/orm/overview/databases/turso)를 참고해 `schema.prisma`와 `src/lib/prisma.ts`를 조정하세요.
-
-### 3. 환경변수 설정
-
-Vercel 대시보드 또는 CLI로 다음 값을 프로덕션에 설정합니다.
-
-```bash
-vercel env add ADMIN_PIN production
-```
-
-`DATABASE_URL`은 위 2단계의 marketplace 통합이 자동으로 채워줍니다.
+연결 문자열은 터미널 기록이나 Git 저장소에 남기지 않도록 주의하세요.
 
 ### 4. 배포
 
-```bash
-vercel deploy --prod
-```
+Vercel의 **Deploy**를 누릅니다. 이후 `main` 브랜치에 push하면 자동으로 다시
+배포됩니다. 배포 후 `/admin`에서 설정한 PIN으로 로그인합니다.
 
-배포 후 `/admin`에서 설정한 PIN으로 로그인해 투표·공지를 생성하고, 발급된 `/poll/[id]` 링크를 카카오톡으로 공유하세요.
+> 기존 `prisma/dev.db`의 SQLite 데이터는 새 PostgreSQL 데이터베이스로 자동 이전되지
+> 않습니다.

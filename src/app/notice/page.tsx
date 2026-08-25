@@ -1,4 +1,5 @@
 import { Pin, Megaphone } from "lucide-react";
+import { connection } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { formatDateTime } from "@/lib/format";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -6,6 +7,8 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { ShareButton } from "@/components/ui/ShareButton";
 
 export default async function NoticePage() {
+  await connection();
+
   const notices = await prisma.notice.findMany({
     orderBy: [{ isPinned: "desc" }, { createdAt: "desc" }],
   });
