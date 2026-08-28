@@ -1,80 +1,220 @@
-# 보드게임 동아리 운영 앱
+# BoardMeet
 
-카카오톡으로 하던 모임 시간 투표 / 보드게임 투표 / 공지를 대체하는 웹앱입니다. 회원은 로그인 없이 링크만으로 참여하고, 회장은 PIN으로 관리자 페이지에 접근합니다.
+BoardMeet is a mobile-first web application designed to simplify the organization of recurring board game meetups.
 
-## 기술 스택
+Instead of relying on scattered group chats, attendance polls, and separate conversations about game choices, BoardMeet brings the entire meetup planning process into one place. Members can indicate which meetup dates they can attend, suggest games, express interest in other suggestions, and see who is planning to join.
 
-- Next.js 16 (App Router) + TypeScript + Tailwind CSS
-- Prisma + PostgreSQL (Neon/Vercel 배포)
-- 관리자 인증: PIN 기반 세션 쿠키 (회원 인증 없음)
+The application is built around a real board game club workflow, with an emphasis on simple coordination rather than complex scheduling.
 
-## 로컬 개발
+## Overview
+
+Organizing recurring board game meetups often involves several separate steps:
+
+- Checking who is available
+- Comparing possible meetup dates
+- Keeping track of participants
+- Suggesting games
+- Matching games to the expected number of players
+- Coordinating who can bring or teach a game
+
+BoardMeet combines these tasks into a focused, mobile-friendly experience.
+
+The typical workflow is:
+
+**Create Meetup → Submit Attendance → Suggest Games → Show Interest → Review Meetup**
+
+## Key Features
+
+### Weekly Meetup Management
+
+Organizers can create upcoming meetup sessions with configurable dates, locations, start times, notes, and response deadlines.
+
+The application is optimized for recurring weekly meetups while still allowing organizers to adjust individual events.
+
+### Attendance Polling
+
+Members can select one or multiple dates they can realistically attend.
+
+Attendance results are aggregated so organizers can quickly see:
+
+- Attendance count for each date
+- Participants attending each date
+- The date with the highest availability
+- Individual member responses
+
+Members can also update their attendance when their schedule changes.
+
+### Game Suggestions
+
+Members can suggest games they would like to play at an upcoming meetup.
+
+Suggestions can include:
+
+- Game name
+- Supported player count
+- Estimated play time
+- Optional notes
+- Whether the member can bring the game
+- Whether the member can teach the rules
+
+### Game Interest
+
+Instead of treating game selection as a strict voting system, members can indicate that they are interested in a suggested game.
+
+This reflects the real meetup workflow, where the final game selection depends on attendance, player count, available time, and group preference.
+
+### Meetup Overview
+
+Organizers can quickly review the current meetup state, including:
+
+- Expected attendance
+- Most available meetup date
+- Game suggestions
+- Interested players
+- Individual member responses
+
+The interface is designed to provide useful information without turning the application into a complex analytics dashboard.
+
+### Club Guidelines
+
+BoardMeet includes a dedicated guidelines section for communicating attendance expectations, game organization rules, and general meetup etiquette.
+
+## Tech Stack
+
+- **Next.js** — App Router and application framework
+- **TypeScript** — Type-safe application development
+- **React** — Component-based user interface
+- **Tailwind CSS** — Responsive UI styling
+- **Supabase** — PostgreSQL database and backend services
+- **Vercel** — Deployment and hosting
+- **Git / GitHub** — Version control and source management
+
+## Engineering Highlights
+
+### Mobile-First Architecture
+
+BoardMeet was designed primarily for mobile use because meetup participants are most likely to interact with attendance polls and game suggestions from their phones.
+
+The interface uses responsive layouts and reusable components while maintaining a focused experience on larger screens.
+
+### Real-World Workflow Design
+
+Rather than implementing a generic scheduling algorithm, the application's data model and user experience are based on the actual workflow of a recurring board game club.
+
+This influenced several product decisions, including:
+
+- Supporting multiple attendance selections
+- Treating games as suggestions rather than binding votes
+- Supporting multiple interested players per game
+- Tracking who can bring or teach a game
+- Allowing multiple game tables instead of assuming one winning game
+
+### Supabase Integration
+
+Application data is persisted using Supabase and PostgreSQL.
+
+The frontend communicates with the backend for meetup, attendance, member, and game suggestion data while keeping database configuration separate from the application source through environment variables.
+
+### Reusable UI Components
+
+Shared interface patterns are implemented as reusable components to reduce duplication and maintain visual consistency across the application.
+
+### Error and Empty-State Handling
+
+The application accounts for common user states such as:
+
+- No upcoming meetup
+- No attendance responses
+- No game suggestions
+- Invalid or missing data
+- Loading states
+- Backend request failures
+
+## Project Structure
+
+```text
+src/
+├── app/                 # Next.js App Router pages and layouts
+├── components/          # Reusable UI components
+├── lib/                 # Shared utilities and backend configuration
+└── types/               # Shared TypeScript definitions
+```
+
+The exact structure may evolve as additional functionality is introduced.
+
+## Getting Started
+
+Clone the repository:
+
+```bash
+git clone <repository-url>
+cd boardmeet-v2
+```
+
+Install dependencies:
 
 ```bash
 npm install
-cp .env.example .env   # PostgreSQL DATABASE_URL, ADMIN_PIN 값을 채워주세요
-npx prisma migrate deploy
+```
+
+Create a local environment file:
+
+```bash
+cp .env.example .env.local
+```
+
+Add the required Supabase environment variables to `.env.local`.
+
+Then start the development server:
+
+```bash
 npm run dev
 ```
 
-http://localhost:3000 에서 확인할 수 있습니다. `/admin`에서 `.env`의 `ADMIN_PIN` 값으로 로그인합니다.
+Open `http://localhost:3000` in your browser.
 
-## 폴더 구조
+## Environment Variables
 
-```
-src/
-  app/
-    page.tsx              # 홈 (진행 중인 투표 + 최근 공지)
-    poll/[id]/             # 투표 참여/결과 (회원용)
-    notice/                # 공지 목록
-    admin/                  # PIN 로그인 + 투표·공지 관리
-  components/               # 공용 UI 컴포넌트
-  lib/                       # prisma client, 인증, 투표 집계 로직
-prisma/
-  schema.prisma
+BoardMeet requires Supabase configuration.
+
+Example:
+
+```env
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 ```
 
-## 핵심 동작
+Never commit production secrets or service-role credentials to the repository.
 
-- **모임 시간 투표**: 관리자가 후보 시간을 여러 개 등록하면 회원은 복수 선택으로 참여합니다. 마감 시각이 지나거나 관리자가 수동으로 마감하면 자동으로 "마감" 상태가 되고 최다 득표 항목이 강조됩니다.
-- **보드게임 투표**: 후보 게임 중 하나만 선택하는 단일 투표이며, 득표순으로 정렬되어 표시됩니다.
-- **동일 기기 재투표**: 회원은 이름 없이도 브라우저 쿠키(기기)로 식별되어, 같은 기기에서 다시 접속하면 기존 투표를 수정하거나 취소할 수 있습니다. 완벽한 본인확인은 지원하지 않습니다.
-- **공지사항**: 고정 공지를 상단에 노출하고, "링크 복사" 버튼으로 카카오톡 공유를 돕습니다.
+## Deployment
 
-## Vercel 배포 가이드
+The application is designed for deployment with Vercel.
 
-### 1. GitHub와 Vercel 연결
+Production environment variables should be configured through the Vercel project settings rather than committed to the repository.
 
-프로젝트를 GitHub 저장소에 push한 뒤 Vercel의 **Add New → Project**에서 해당
-저장소를 Import합니다. Framework Preset은 Next.js가 자동 감지됩니다.
+## Future Improvements
 
-### 2. 프로덕션 데이터베이스 준비
+Potential future development includes:
 
-Vercel 프로젝트에서 **Storage → Create Database → Neon**을 선택하고 데이터베이스를
-연결합니다. 연결이 끝나면 `DATABASE_URL` 환경변수가 생성되었는지 확인합니다.
+- Member authentication
+- Organizer-only administrative controls
+- Attendance history
+- Member activity tracking
+- Multiple game-table planning
+- Improved game compatibility recommendations
+- Notifications for upcoming meetups
+- Internationalization
 
-### 3. 환경변수와 테이블 생성
+## What I Learned
 
-Vercel의 **Settings → Environment Variables**에 다음 값을 설정합니다.
+Building BoardMeet gave me practical experience designing a full-stack application around real user requirements rather than implementing features in isolation.
 
-```text
-DATABASE_URL=<Neon pooled PostgreSQL 연결 문자열>
-ADMIN_PIN=<추측하기 어려운 관리자 PIN>
-```
+The project involved translating an existing manual meetup workflow into a structured product, designing relational data around attendance and game suggestions, integrating a Next.js frontend with Supabase, building reusable responsive components, and preparing the application for production deployment.
 
-Neon SQL Editor에서 `prisma/migrations/20260815235918_init/migration.sql`을 실행하거나,
-로컬에서 프로덕션 연결 문자열을 일시적으로 전달해 마이그레이션을 적용합니다.
+It also reinforced the importance of keeping product scope focused: BoardMeet intentionally prioritizes the core meetup workflow instead of adding unnecessary social or scheduling features.
 
-```bash
-DATABASE_URL='Neon 연결 문자열' npx prisma migrate deploy
-```
+## Author
 
-연결 문자열은 터미널 기록이나 Git 저장소에 남기지 않도록 주의하세요.
+Developed by **Dayun Yu**
 
-### 4. 배포
-
-Vercel의 **Deploy**를 누릅니다. 이후 `main` 브랜치에 push하면 자동으로 다시
-배포됩니다. 배포 후 `/admin`에서 설정한 PIN으로 로그인합니다.
-
-> 기존 `prisma/dev.db`의 SQLite 데이터는 새 PostgreSQL 데이터베이스로 자동 이전되지
-> 않습니다.
+Computer Programming student focused on full-stack web development.
