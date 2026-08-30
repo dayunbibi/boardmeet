@@ -16,18 +16,26 @@ export function ParticipantList({ participants, locale = "ko" }: { participants:
             <div className="flex items-center gap-2">
               <span className="text-[15px] font-medium text-text-primary">{p.name}</span>
               <span className="text-[13px] text-text-secondary">
-                {locale === "ko" ? `${p.optionLabels.length}개 선택` : `${p.optionLabels.length} selected`}
+                {p.optionLabels.length === 0
+                  ? locale === "ko" ? "모두 불참" : "Unavailable for all"
+                  : locale === "ko" ? `${p.optionLabels.length}개 선택` : `${p.optionLabels.length} selected`}
               </span>
             </div>
           }
         >
-          <ul className="flex flex-col gap-1.5">
-            {p.optionLabels.map((label, i) => (
-              <li key={i} className="text-sm text-text-secondary">
-                • {label}
-              </li>
-            ))}
-          </ul>
+          {p.optionLabels.length === 0 ? (
+            <p className="text-sm text-text-secondary">
+              {locale === "ko" ? "참석 가능한 날짜가 없습니다." : "No available dates."}
+            </p>
+          ) : (
+            <ul className="flex flex-col gap-1.5">
+              {p.optionLabels.map((label, i) => (
+                <li key={i} className="text-sm text-text-secondary">
+                  • {label}
+                </li>
+              ))}
+            </ul>
+          )}
         </Accordion>
       ))}
     </div>

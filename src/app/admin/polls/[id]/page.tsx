@@ -24,7 +24,10 @@ export default async function AdminPollDetailPage({
 
   const poll = await prisma.poll.findUnique({
     where: { id },
-    include: { options: { orderBy: { order: "asc" }, include: { votes: true } } },
+    include: {
+      participants: true,
+      options: { orderBy: { order: "asc" }, include: { votes: true } },
+    },
   });
   if (!poll) notFound();
 

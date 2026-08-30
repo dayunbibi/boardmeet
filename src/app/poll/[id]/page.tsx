@@ -31,7 +31,10 @@ export default async function PollPage({
 
   const poll = await prisma.poll.findUnique({
     where: { id },
-    include: { options: { orderBy: { order: "asc" }, include: { votes: true } } },
+    include: {
+      participants: true,
+      options: { orderBy: { order: "asc" }, include: { votes: true } },
+    },
   });
 
   if (!poll) notFound();
@@ -45,10 +48,11 @@ export default async function PollPage({
           .map((o) => o.id)
       )
     : new Set<string>();
-  const myVoterName = deviceId
-    ? poll.options.flatMap((o) => o.votes).find((v) => v.deviceToken === deviceId)?.voterName ?? ""
-    : "";
-  const hasVoted = myOptionIds.size > 0;
+  const myParticipant = deviceId
+    ? poll.participants.find((participant) => participant.deviceToken === deviceId)
+    : undefined;
+  const myVoterName = myParticipant?.voterName ?? "";
+  const hasVoted = Boolean(myParticipant);
 
   const isTimePoll = poll.type === "TIME";
   const inputType = isTimePoll ? "checkbox" : "radio";

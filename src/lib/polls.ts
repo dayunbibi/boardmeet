@@ -1,7 +1,8 @@
-import type { Poll, PollOption, Vote } from "@prisma/client";
+import type { Poll, PollOption, PollParticipant, Vote } from "@prisma/client";
 
 export type PollWithVotes = Poll & {
   options: (PollOption & { votes: Vote[] })[];
+  participants: PollParticipant[];
 };
 
 export function isPollClosed(poll: Poll): boolean {
@@ -21,8 +22,7 @@ export type OptionResult = {
 };
 
 export function getParticipantCount(poll: PollWithVotes): number {
-  const tokens = new Set(poll.options.flatMap((o) => o.votes.map((v) => v.deviceToken)));
-  return tokens.size;
+  return poll.participants.length;
 }
 
 export function getOptionResults(poll: PollWithVotes): OptionResult[] {
@@ -51,18 +51,21 @@ export type Participant = {
 };
 
 export function getParticipants(poll: PollWithVotes): Participant[] {
-  const byToken = new Map<string, Participant>();
+  const byToken = new Map<string, Participant>(
+    poll.participants.map((participant) => [
+      participant.deviceToken,
+      {
+        key: participant.deviceToken,
+        name: participant.voterName,
+        optionLabels: [] as string[],
+      },
+    ])
+  );
   for (const option of poll.options) {
     for (const vote of option.votes) {
       const existing = byToken.get(vote.deviceToken);
       if (existing) {
         existing.optionLabels.push(option.label);
-      } else {
-        byToken.set(vote.deviceToken, {
-          key: vote.deviceToken,
-          name: vote.voterName,
-          optionLabels: [option.label],
-        });
       }
     }
   }

@@ -22,8 +22,23 @@ model Poll {
   createdAt   DateTime @default(now())
 
   options PollOption[]
+  participants PollParticipant[]
 
   @@index([type])
+}
+
+model PollParticipant {
+  id          String   @id @default(cuid())
+  pollId      String
+  voterName   String
+  deviceToken String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  poll Poll @relation(fields: [pollId], references: [id], onDelete: Cascade)
+
+  @@unique([pollId, deviceToken])
+  @@index([pollId])
 }
 
 model PollOption {

@@ -33,6 +33,11 @@ export async function submitVoteAction(pollId: string, formData: FormData): Prom
   const deviceId = await getOrCreateDeviceId();
 
   await prisma.$transaction([
+    prisma.pollParticipant.upsert({
+      where: { pollId_deviceToken: { pollId, deviceToken: deviceId } },
+      create: { pollId, voterName, deviceToken: deviceId },
+      update: { voterName },
+    }),
     prisma.vote.deleteMany({
       where: { deviceToken: deviceId, pollOption: { pollId } },
     }),
@@ -53,9 +58,14 @@ export async function cancelVoteAction(pollId: string): Promise<void> {
   const deviceId = await getDeviceId();
   if (!deviceId) return;
 
-  await prisma.vote.deleteMany({
-    where: { deviceToken: deviceId, pollOption: { pollId } },
-  });
+  await prisma.$transaction([
+    prisma.vote.deleteMany({
+      where: { deviceToken: deviceId, pollOption: { pollId } },
+    }),
+    prisma.pollParticipant.deleteMany({
+      where: { pollId, deviceToken: deviceId },
+    }),
+  ]);
 
   revalidatePath(`/poll/${pollId}`);
   revalidatePath("/");
